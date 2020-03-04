@@ -1,0 +1,14 @@
+#version 300 es
+precision mediump float;
+precision highp int;
+
+uniform highp sampler2D Input;
+
+layout(location = 0) out highp vec4 fsout_Color0;
+in highp vec2 vdspv_fsin0;
+
+void main()
+{
+    fsout_Color0 = texture(Input, vdspv_fsin0);
+}
+

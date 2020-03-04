@@ -1,0 +1,21 @@
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+constant float4 _25[4] = { float4(-1.0, 1.0, 0.0, 0.0), float4(1.0, 1.0, 1.0, 0.0), float4(-1.0, -1.0, 0.0, 1.0), float4(1.0, -1.0, 1.0, 1.0) };
+
+struct main0_out
+{
+    float2 m_42 [[user(locn0)]];
+    float4 gl_Position [[position]];
+};
+
+vertex main0_out main0(uint gl_VertexIndex [[vertex_id]])
+{
+    main0_out out = {};
+    out.gl_Position = float4(_25[gl_VertexIndex].xy, 0.0, 1.0);
+    out.m_42 = _25[gl_VertexIndex].zw;
+    return out;
+}
+

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Shaders\FullScreen\fragment.essl" />
+    <None Remove="Shaders\FullScreen\fragment.glsl" />
+    <None Remove="Shaders\FullScreen\fragment.hlsl" />
+    <None Remove="Shaders\FullScreen\fragment.msl" />
+    <None Remove="Shaders\FullScreen\fragment.vk" />
+    <None Remove="Shaders\FullScreen\vertex.essl" />
+    <None Remove="Shaders\FullScreen\vertex.glsl" />
+    <None Remove="Shaders\FullScreen\vertex.hlsl" />
+    <None Remove="Shaders\FullScreen\vertex.msl" />
+    <None Remove="Shaders\FullScreen\vertex.vk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Shaders\FullScreen\fragment.essl" />
+    <EmbeddedResource Include="Shaders\FullScreen\fragment.glsl" />
+    <EmbeddedResource Include="Shaders\FullScreen\fragment.hlsl" />
+    <EmbeddedResource Include="Shaders\FullScreen\fragment.msl" />
+    <EmbeddedResource Include="Shaders\FullScreen\fragment.vk" />
+    <EmbeddedResource Include="Shaders\FullScreen\vertex.essl" />
+    <EmbeddedResource Include="Shaders\FullScreen\vertex.glsl" />
+    <EmbeddedResource Include="Shaders\FullScreen\vertex.hlsl" />
+    <EmbeddedResource Include="Shaders\FullScreen\vertex.msl" />
+    <EmbeddedResource Include="Shaders\FullScreen\vertex.vk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="0.9.3" />
+    <PackageReference Include="Veldrid" Version="4.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Shaders\Slate\" />
+  </ItemGroup>
+
+</Project>
