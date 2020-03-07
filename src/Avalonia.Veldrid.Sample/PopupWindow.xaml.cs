@@ -3,15 +3,15 @@ using Avalonia.Markup.Xaml;
 
 namespace Avalonia.Veldrid.Sample
 {
-    public class MainWindow : Window
+    public class PopupWindow : Window
     {
-        public MainWindow()
+        public PopupWindow()
         {
             InitializeComponent();
 #if DEBUG
             this.AttachDevTools();
 #endif
-            DataContext = new MainViewModel();
+            DataContext = new PopupViewModel {CloseCommand = new ActionCommand(Close)};
         }
 
         private void InitializeComponent()

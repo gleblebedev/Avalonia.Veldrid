@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Threading;
 using Avalonia.Dialogs;
+using Avalonia.Veldrid.Sample;
 using CommandLine;
 using Veldrid;
 
@@ -26,14 +27,20 @@ namespace Avalonia.Veldrid.DesktopSample
                 }
             }
 
-            var builder = AppBuilder.Configure<Avalonia.Veldrid.Sample.App>()
+            var builder = PortableAppBuilder.Configure<App>()
                 .UseVeldridSdl2Window()
-                .With(new VeldridSdl2PlatformOptions())
+                .With(new VeldridSdl2PlatformOptions
+                {
+                    GraphicsBackend = options.Value.GraphicsBackend,
+                    WindowState = options.Value.WindowState,
+                    RenderDoc = options.Value.RenderDoc
+                })
                 .UseSkia()
                 //.UseReactiveUI()
                 .UseManagedSystemDialogs();
 
-            //return builder.StartWithClassicDesktopLifetime(args);
+            //builder.Start<Avalonia.Veldrid.Sample.MainWindow>();
+            //return 1;
             return builder.StartWithClassicDesktopLifetime(args);
         }
     }

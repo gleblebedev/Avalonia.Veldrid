@@ -9,14 +9,14 @@ namespace Avalonia.Veldrid.Sdl2
     public class VeldridSdl2WindowPlatform : PlatformThreadingInterfaceBase, IPlatformSettings, IWindowingPlatform
     {
         private static readonly VeldridSdl2WindowPlatform s_instance = new VeldridSdl2WindowPlatform();
+        private static VeldridSdl2PlatformOptions _options;
         private Sdl2AvaloniaWindow _windowImpl;
 
-        public VeldridSdl2WindowPlatform()
+        public static VeldridSdl2PlatformOptions Options
         {
-            _windowImpl = new Sdl2AvaloniaWindow();
+            get => _options ?? new VeldridSdl2PlatformOptions();
+            private set => _options = value;
         }
-
-        public static VeldridSdl2PlatformOptions Options { get; private set; }
 
         public Size DoubleClickSize { get; } = new Size(2, 2);
         public TimeSpan DoubleClickTime { get; } = TimeSpan.FromSeconds(0.5);
@@ -28,7 +28,7 @@ namespace Avalonia.Veldrid.Sdl2
 
         public static void Initialize(VeldridSdl2PlatformOptions options)
         {
-            Options = options;
+            _options = options;
             AvaloniaLocator.CurrentMutable
                 .Bind<IPlatformSettings>().ToConstant(s_instance)
                 .Bind<IStandardCursorFactory>().ToTransient<CursorFactory>()
@@ -52,13 +52,13 @@ namespace Avalonia.Veldrid.Sdl2
 
         public IWindowImpl CreateWindow()
         {
-            if (_windowImpl == null) _windowImpl = new Sdl2AvaloniaWindow();
+            if (_windowImpl == null) _windowImpl = new Sdl2AvaloniaWindow(Options, null);
             return _windowImpl.CreateWindow();
         }
 
         public IEmbeddableWindowImpl CreateEmbeddableWindow()
         {
-            throw new NotImplementedException();
+            return _windowImpl.CreateEmbeddableWindow();
         }
     }
 }

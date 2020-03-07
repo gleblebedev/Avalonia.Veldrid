@@ -1,17 +1,18 @@
 ﻿using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using Avalonia.Input;
+using Avalonia.Input.Raw;
 using Avalonia.Platform;
 using Veldrid;
 using Veldrid.Sdl2;
 using Veldrid.StartupUtilities;
 using Veldrid.Utilities;
 using Key = Veldrid.Key;
+using MouseButton = Veldrid.MouseButton;
 using PixelFormat = Veldrid.PixelFormat;
-using WindowState = Avalonia.Controls.WindowState;
 
 namespace Avalonia.Veldrid.Sdl2
 {
@@ -21,34 +22,52 @@ namespace Avalonia.Veldrid.Sdl2
         private static GraphicsDevice _gd;
         private static DisposeCollectorResourceFactory _factory;
         private static bool _windowResized = true;
-        private Size _minSize;
-        private Size _maxSize;
-        private readonly ConcurrentQueue<Action> _executionList = new ConcurrentQueue<Action>();
         private readonly CommandList _cl;
+
+        private readonly WindowsCollectionView _windows = new WindowsCollectionView();
+        private readonly AvaloniaVeldridContext _context;
+        private readonly VeldridScreenStub _veldridScreen;
         private Point _lastKnownMousePosition;
 
         private RawInputModifiers _rawInputModifiers = RawInputModifiers.None;
+        private VeldridTopLevelImpl _activeWindow;
 
-        private readonly List<Sdl2TextureWindowImpl> _windows = new List<Sdl2TextureWindowImpl>();
-        private Sdl2TextureWindowImpl _hudWindow;
-        private readonly object _gate = new object();
-        private readonly AvaloniaVeldridContext _context;
-
-        public Sdl2AvaloniaWindow()
+        public Sdl2AvaloniaWindow(VeldridSdl2PlatformOptions options, AvaloniaVeldridContext context = null)
         {
             var flags = SDL_WindowFlags.OpenGL | SDL_WindowFlags.Resizable | SDL_WindowFlags.Shown;
+            switch (options.WindowState)
+            {
+                case WindowState.Normal:
+                    break;
+                case WindowState.FullScreen:
+                    flags |= SDL_WindowFlags.FullScreenDesktop;
+                    break;
+                case WindowState.Maximized:
+                    flags |= SDL_WindowFlags.Maximized;
+                    break;
+                case WindowState.Minimized:
+                    flags |= SDL_WindowFlags.Minimized;
+                    break;
+                case WindowState.BorderlessFullScreen:
+                    flags |= SDL_WindowFlags.Borderless | SDL_WindowFlags.FullScreenDesktop;
+                    break;
+                case WindowState.Hidden:
+                    flags |= SDL_WindowFlags.Hidden;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
+            }
+
             _window = new Sdl2Window(
                 "Avalonia.Veldrid.Sdl2",
                 100,
                 100,
-                1281,
+                1280,
                 720,
                 flags,
                 false);
 
-            _window.Resized += () => { _windowResized = true; };
-
-            var options = new GraphicsDeviceOptions(
+            var graphicsDeviceOptions = new GraphicsDeviceOptions(
                 false,
                 PixelFormat.R16_UNorm,
                 true,
@@ -56,12 +75,26 @@ namespace Avalonia.Veldrid.Sdl2
                 true,
                 true);
 #if DEBUG
-            options.Debug = true;
+            graphicsDeviceOptions.Debug = true;
 #endif
-            _gd = VeldridStartup.CreateGraphicsDevice(_window, options);
+            if (options.GraphicsBackend.HasValue)
+                _gd = VeldridStartup.CreateGraphicsDevice(_window, graphicsDeviceOptions,
+                    options.GraphicsBackend.Value);
+            else
+                _gd = VeldridStartup.CreateGraphicsDevice(_window, graphicsDeviceOptions);
             _factory = new DisposeCollectorResourceFactory(_gd.ResourceFactory);
-            _context = new AvaloniaVeldridContext(_gd, _gd.MainSwapchain.Framebuffer.OutputDescription);
+            _veldridScreen = new VeldridScreenStub
+                {Size = new FramebufferSize((uint) _window.Width, (uint) _window.Height)};
+            _context = context ?? new AvaloniaVeldridContext();
+            _context.SetGraphicsDevice(_gd);
+            _context.Screen = _veldridScreen;
             _cl = _factory.CreateCommandList();
+
+            _window.Resized += () =>
+            {
+                _veldridScreen.Size = new FramebufferSize((uint) _window.Width, (uint) _window.Height);
+                _windowResized = true;
+            };
 
             MouseDevice = new MouseDevice();
 
@@ -96,32 +129,18 @@ namespace Avalonia.Veldrid.Sdl2
                     {
                         _windowResized = false;
                         _gd.ResizeMainWindow((uint) _window.Width, (uint) _window.Height);
-                        //Resized?.Invoke(new Size(_window.Width, _window.Height));
+                        //Resized?.Invoke(new Size(_window.FramebufferWidth, _window.FramebufferHeight));
                     }
-
-                    while (_executionList.TryDequeue(out var action)) action();
-                    //Paint?.Invoke(new Rect(0, 0, _window.Width, _window.Height));
+                    _context.PurgeMainThreadQueue();
+                    //Paint?.Invoke(new Rect(0, 0, _window.FramebufferWidth, _window.FramebufferHeight));
                     _cl.Begin();
                     _cl.SetFramebuffer(_gd.MainSwapchain.Framebuffer);
                     _cl.SetFullViewport(0);
-                    lock (_gate)
-                    {
-                        var hasHud = false;
-                        foreach (var window in _windows)
-                            if (window.WindowState == WindowState.Maximized)
-                            {
-                                window.Resize(new Size(_window.Width, _window.Height));
-                                window.RenderFullscreen(_cl);
-                                hasHud = true;
-                                break;
-                            }
-
-                        if (!hasHud) _cl.ClearColorTarget(0, RgbaFloat.Black);
-                        foreach (var window in _windows)
-                            if (window.WindowState != WindowState.Maximized)
-                                window.RenderSlate(_cl);
-                    }
-
+                    _cl.ClearDepthStencil(1.0f);
+                    _windows.Fetch(_context);
+                    var hasHud = _windows.Any(_ => _.IsFullscreen);
+                    if (!hasHud) _cl.ClearColorTarget(0, RgbaFloat.CornflowerBlue);
+                    foreach (var window in _windows) window.Render(_cl);
                     _cl.End();
                     _gd.SubmitCommands(_cl);
 
@@ -136,23 +155,21 @@ namespace Avalonia.Veldrid.Sdl2
 
         public void EnsureInvokeOnMainThread(Action callback)
         {
-            _executionList.Enqueue(callback);
+            _context.EnsureInvokeOnMainThread(callback);
         }
 
         public IWindowImpl CreateWindow()
         {
-            var textureWindowImpl =
-                new Sdl2TextureWindowImpl(_context, _gd.MainSwapchain.Framebuffer.OutputDescription, this);
-            if (textureWindowImpl.WindowState == WindowState.Maximized)
-            {
-            }
-
-            lock (_gate)
-            {
-                _windows.Add(textureWindowImpl);
-            }
+            var textureWindowImpl = new VeldridWindowImpl(_context);
 
             return textureWindowImpl;
+        }
+
+        public IEmbeddableWindowImpl CreateEmbeddableWindow()
+        {
+            var veldridEmbeddableWindowImpl = new VeldridEmbeddableWindowImpl(_context);
+
+            return veldridEmbeddableWindowImpl;
         }
 
         private void OnKeyDown(KeyEvent args)
@@ -195,53 +212,87 @@ namespace Avalonia.Veldrid.Sdl2
 
         private void OnMouseUp(MouseEvent args)
         {
-            //switch (args.MouseButton)
-            //{
-            //    case MouseButton.Left:
-            //        _rawInputModifiers &= ~RawInputModifiers.LeftMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.LeftButtonUp, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //    case MouseButton.Middle:
-            //        _rawInputModifiers &= ~RawInputModifiers.MiddleMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.MiddleButtonUp, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //    case MouseButton.Right:
-            //        _rawInputModifiers &= ~RawInputModifiers.RightMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.RightButtonUp, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //}
+            switch (args.MouseButton)
+            {
+                case MouseButton.Left:
+                    _rawInputModifiers &= ~RawInputModifiers.LeftMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.LeftButtonUp, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+                case MouseButton.Middle:
+                    _rawInputModifiers &= ~RawInputModifiers.MiddleMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.MiddleButtonUp, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+                case MouseButton.Right:
+                    _rawInputModifiers &= ~RawInputModifiers.RightMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.RightButtonUp, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+            }
         }
 
         private void OnMouseDown(MouseEvent args)
         {
-            //switch (args.MouseButton)
-            //{
-            //    case MouseButton.Left:
-            //        _rawInputModifiers |= RawInputModifiers.LeftMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.LeftButtonDown, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //    case MouseButton.Middle:
-            //        _rawInputModifiers |= RawInputModifiers.MiddleMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.MiddleButtonDown, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //    case MouseButton.Right:
-            //        _rawInputModifiers |= RawInputModifiers.RightMouseButton;
-            //        this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.RightButtonDown, _lastKnownMousePosition, _rawInputModifiers));
-            //        break;
-            //}
+            switch (args.MouseButton)
+            {
+                case MouseButton.Left:
+                    _rawInputModifiers |= RawInputModifiers.LeftMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.LeftButtonDown, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+                case MouseButton.Middle:
+                    _rawInputModifiers |= RawInputModifiers.MiddleMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.MiddleButtonDown, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+                case MouseButton.Right:
+                    _rawInputModifiers |= RawInputModifiers.RightMouseButton;
+                    _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                        RawPointerEventType.RightButtonDown, _lastKnownMousePosition, _rawInputModifiers));
+                    break;
+            }
         }
 
 
         private void OnMouseLeft()
         {
-            //_rawInputModifiers &= RawInputModifiers.KeyboardMask;
-            //this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.LeaveWindow, _lastKnownMousePosition, _rawInputModifiers));
+            _rawInputModifiers &= RawInputModifiers.KeyboardMask;
+            _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                RawPointerEventType.LeaveWindow, _lastKnownMousePosition, _rawInputModifiers));
         }
 
         private void OnMouseMove(MouseMoveEventArgs args)
         {
-            //_lastKnownMousePosition = new Point(args.MousePosition.X, args.MousePosition.Y);
-            //this.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _owner, RawPointerEventType.Move, _lastKnownMousePosition, _rawInputModifiers));
+            UpdateMousePosition(new Point(args.MousePosition.X, args.MousePosition.Y));
+            _activeWindow?.Input?.Invoke(new RawPointerEventArgs(MouseDevice, 0, _activeWindow.InputRoot,
+                RawPointerEventType.Move, _lastKnownMousePosition, _rawInputModifiers));
+        }
+
+        private void UpdateMousePosition(Point point)
+        {
+            //_lastKnownMousePosition = point;
+            var clipSpaceRay =
+                new ClipSpaceRay(point, new Size(_window.Width, _window.Height), _gd.IsDepthRangeZeroToOne, false);
+            VeldridTopLevelImpl activeWindow = null;
+            var mousePos = default(Point);
+            for (var index = 0; index < _windows.Count && clipSpaceRay.From.Z < clipSpaceRay.To.Z; index++)
+            {
+                var window = _windows[index];
+                var res = window.Raycast(clipSpaceRay);
+                if (res.HasValue)
+                {
+                    activeWindow = window;
+                    mousePos = res.Value.WindowPoint;
+                    clipSpaceRay.To.Z = res.Value.ClipSpaceDepth;
+                }
+            }
+
+            if (activeWindow != null)
+            {
+                _activeWindow = activeWindow;
+                _lastKnownMousePosition = mousePos;
+            }
         }
     }
 }

@@ -6,10 +6,10 @@
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="0.9.3" />
-    <PackageReference Include="Veldrid" Version="4.7.0" />
-    <PackageReference Include="Veldrid.Sdl2" Version="4.7.0" />
-    <PackageReference Include="Veldrid.StartupUtilities" Version="4.7.0" />
-    <PackageReference Include="Veldrid.Utilities" Version="4.7.0" />
+    <PackageReference Include="Veldrid" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.Sdl2" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.StartupUtilities" Version="$(VeldridVersion)" />
+    <PackageReference Include="Veldrid.Utilities" Version="$(VeldridVersion)" />
   </ItemGroup>
 
   <ItemGroup>

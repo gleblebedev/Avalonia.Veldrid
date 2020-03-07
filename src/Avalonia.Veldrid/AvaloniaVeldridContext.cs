@@ -1,46 +1,195 @@
 ﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Numerics;
+using Avalonia.Input;
+using Avalonia.Platform;
 using Veldrid;
 
 namespace Avalonia.Veldrid
 {
     public class AvaloniaVeldridContext : IDisposable
     {
-        public AvaloniaVeldridContext(GraphicsDevice graphicsDevice, OutputDescription outputDescription)
+        private readonly object _windowsCollectionLock = new object();
+        private readonly HashSet<VeldridTopLevelImpl> _windows = new HashSet<VeldridTopLevelImpl>();
+        private GraphicsDevice _graphicsDevice;
+        private OutputDescription? _outputDescription;
+        private readonly Func<GraphicsDevice, Sampler> _samplerFactory;
+        private Shader[] _shaders;
+        private ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
+
+        public AvaloniaVeldridContext(GraphicsDevice graphicsDevice = null, OutputDescription? outputDescription = null,
+            IScreenImpl screenImpl = null, IMouseDevice mouseDevice = null, IKeyboardDevice keyboardDevice = null,
+            Func<GraphicsDevice,Sampler> samplerFactory = null)
         {
-            GraphicsDevice = graphicsDevice;
+            _graphicsDevice = graphicsDevice;
+            _outputDescription = outputDescription;
+            _samplerFactory = samplerFactory ?? DefaultSamplerFactory;
+            Screen = screenImpl ?? new VeldridScreenStub();
+            MouseDevice = mouseDevice ?? new MouseDevice();
+            KeyboardDevice = keyboardDevice ?? new KeyboardDevice();
+
+            if (_graphicsDevice != null)
+            {
+                OnDeviceCreated();
+            }
+        }
+
+        private Sampler DefaultSamplerFactory(GraphicsDevice graphicsDevice)
+        {
+            return graphicsDevice.Aniso4xSampler;
+        }
+
+        /// <summary>
+        /// GraphicsDevice been created and available.
+        /// </summary>
+        public event Action<GraphicsDevice> DeviceCreated;
+
+        /// <summary>
+        /// GraphicsDevice been destroyed.
+        /// </summary>
+        public event Action DeviceDestroyed;
+
+        public IScreenImpl Screen { get; set; }
+
+        public GraphicsDevice GraphicsDevice
+        {
+            get { return _graphicsDevice; }
+        }
+
+        public void SetGraphicsDevice(GraphicsDevice graphicsDevice, OutputDescription? outputDescription = null)
+        {
+            if (_graphicsDevice != graphicsDevice)
+            {
+                if (_graphicsDevice != null)
+                {
+                    OnDeviceDestroyed();
+                    _outputDescription = null;
+                }
+                _graphicsDevice = graphicsDevice;
+                if (_graphicsDevice != null)
+                {
+                    _outputDescription = outputDescription ?? graphicsDevice.MainSwapchain.Framebuffer.OutputDescription;
+                    OnDeviceCreated();
+                }
+            }
+        }
+
+        private void OnDeviceCreated()
+        {
             var factory = GraphicsDevice.ResourceFactory;
             var thisClass = GetType();
-            var shaders = ShaderHelper.LoadShader(GraphicsDevice, factory, thisClass.Assembly,
-                thisClass.Namespace + ".Shaders.FullScreen");
+            _shaders = ShaderHelper.LoadShader(GraphicsDevice, factory, thisClass.Assembly,
+                thisClass.Namespace + ".Shaders");
             SpecializationConstant[] specConstants =
             {
                 //new SpecializationConstant(0, gd.BackendType == GraphicsBackend.OpenGL || gd.BackendType == GraphicsBackend.OpenGLES)
             };
             TextureResourceLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
+                new ResourceLayoutElementDescription("WindowUniforms", ResourceKind.UniformBuffer, ShaderStages.Vertex),
                 new ResourceLayoutElementDescription("Input", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("InputSampler", ResourceKind.Sampler, ShaderStages.Fragment)));
 
-            FullScreenPipeline = factory.CreateGraphicsPipeline(
+            Pipeline = factory.CreateGraphicsPipeline(
                 new GraphicsPipelineDescription(
                     BlendStateDescription.SingleOverrideBlend,
-                    DepthStencilStateDescription.Disabled,
+                    DepthStencilStateDescription.DepthOnlyLessEqual,
                     RasterizerStateDescription.CullNone,
                     PrimitiveTopology.TriangleStrip,
-                    new ShaderSetDescription(new VertexLayoutDescription[] { }, shaders, specConstants),
-                    new[] {TextureResourceLayout},
-                    outputDescription
+                    new ShaderSetDescription(new VertexLayoutDescription[] { }, _shaders, specConstants),
+                    new[] { TextureResourceLayout },
+                    _outputDescription ?? GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription
                 ));
+
+            Sampler = _samplerFactory(GraphicsDevice);
+
+            DeviceCreated?.Invoke(_graphicsDevice);
         }
 
-        public GraphicsDevice GraphicsDevice { get; }
+        private void OnDeviceDestroyed()
+        {
+            TextureResourceLayout?.Dispose();
+            TextureResourceLayout = null;
+            Pipeline?.Dispose();
+            Pipeline = null;
+            if (_shaders!=null)
+                foreach (var shader in _shaders)
+                {
+                    shader.Dispose();
+                }
+            _shaders = null;
+            DeviceDestroyed?.Invoke();
+        }
 
-        public ResourceLayout TextureResourceLayout { get; }
-        public Pipeline FullScreenPipeline { get; }
+        public Matrix4x4 Projection { get; set; } =
+            Matrix4x4.CreatePerspectiveFieldOfView((float) Math.PI * 0.5f, 1, 0.01f, 100.0f);
+
+        public Matrix4x4 View { get; set; } = Matrix4x4.CreateLookAt(new Vector3(1, 1, 4), Vector3.Zero, Vector3.UnitY);
+
+        public ResourceLayout TextureResourceLayout { get; private set; }
+        public Pipeline Pipeline { get; private set; }
+
+        public IMouseDevice MouseDevice { get; }
+
+        public IKeyboardDevice KeyboardDevice { get; }
+
+        public FramebufferSize ScreenSize
+        {
+            get
+            {
+                return  new FramebufferSize((uint) Screen.AllScreens[0].WorkingArea.Width,
+                    (uint) Screen.AllScreens[0].WorkingArea.Height);
+            }
+        }
+
+        public float TexelSize { get; set; } = 0.01f;
+        public Sampler Sampler { get; private set; }
 
         public virtual void Dispose()
         {
-            FullScreenPipeline.Dispose();
+            Pipeline.Dispose();
             TextureResourceLayout.Dispose();
+        }
+
+        internal void UpdateView(List<VeldridTopLevelImpl> view)
+        {
+            lock (_windowsCollectionLock)
+            {
+                view.Clear();
+                if (view.Capacity < _windows.Count)
+                    view.Capacity = _windows.Count;
+                foreach (var window in _windows) view.Add(window);
+            }
+        }
+
+        internal void AddWindow(VeldridTopLevelImpl window)
+        {
+            lock (_windowsCollectionLock)
+            {
+                _windows.Add(window);
+            }
+        }
+
+        internal void RemoveWindow(VeldridTopLevelImpl window)
+        {
+            lock (_windowsCollectionLock)
+            {
+                _windows.Remove(window);
+            }
+        }
+
+        public void EnsureInvokeOnMainThread(Action action)
+        {
+            _mainThreadActions.Enqueue(action);
+        }
+
+        public void PurgeMainThreadQueue()
+        {
+            while (_mainThreadActions.TryDequeue(out Action action))
+            {
+                action();
+            }
         }
     }
 }

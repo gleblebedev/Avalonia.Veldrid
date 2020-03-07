@@ -1,5 +1,4 @@
-﻿using Avalonia;
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 
 namespace Avalonia.Veldrid.Sample
@@ -8,7 +7,7 @@ namespace Avalonia.Veldrid.Sample
     {
         public MainView()
         {
-            this.InitializeComponent();
+            InitializeComponent();
         }
 
         private void InitializeComponent()

@@ -6,7 +6,7 @@
              x:Class="Avalonia.Veldrid.Sample.MainView">
     <StackPanel>
         <TextBlock>Welcome to Avalonia!</TextBlock>
-        <Button>
+        <Button Command="{Binding TestCommand}">
             <TextBlock>Test button</TextBlock>
         </Button>
     </StackPanel>

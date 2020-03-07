@@ -1,5 +1,7 @@
 ﻿using Avalonia.Controls;
 using Avalonia.Veldrid.Sdl2;
+using Veldrid;
+using WindowState = Veldrid.WindowState;
 
 namespace Avalonia
 {
@@ -9,7 +11,7 @@ namespace Avalonia
     public static class VeldridSdl2ApplicationExtensions
     {
         /// <summary>
-        ///     Enable Skia renderer.
+        ///     Create Veldrid Sdl2 window to host the application.
         /// </summary>
         /// <typeparam name="T">Builder type.</typeparam>
         /// <param name="builder">Builder.</param>
@@ -26,5 +28,8 @@ namespace Avalonia
 
     public class VeldridSdl2PlatformOptions
     {
+        public GraphicsBackend? GraphicsBackend { get; set; }
+        public WindowState WindowState { get; set; }
+        public bool RenderDoc { get; set; }
     }
 }
