@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Avalonia.Platform;
@@ -70,6 +71,7 @@ namespace Avalonia.Veldrid
             if (_texture == null || _texture.Width != framebufferSize.Width ||
                 _texture.Height != framebufferSize.Height)
             {
+                Debug.WriteLine($"New framebuffer size {framebufferSize}");
                 _texture?.Dispose();
                 var factory = GraphicsDevice.ResourceFactory;
                 _texture = factory.CreateTexture(new TextureDescription(framebufferSize.Width, framebufferSize.Height,
@@ -121,7 +123,7 @@ namespace Avalonia.Veldrid
             {
                 get
                 {
-                    var stagingTexture = _framebufferSource.GetStagingTexture();
+                    var stagingTexture = _framebufferSource.Size;
                     return new PixelSize((int) stagingTexture.Width,
                         (int) stagingTexture.Height);
                 }
@@ -137,12 +139,6 @@ namespace Avalonia.Veldrid
             {
                 _mapping = _framebufferSource.GraphicsDevice.Map<byte>(_framebufferSource.GetStagingTexture(),
                     MapMode.Write);
-                //unsafe
-                //{
-                //    var size = _mapping.SizeInBytes;
-                //    var span = new Span<byte>(_mapping.MappedResource.Data.ToPointer(), (int)size);
-                //    span.Fill(255);
-                //}
             }
 
             public void Dispose()

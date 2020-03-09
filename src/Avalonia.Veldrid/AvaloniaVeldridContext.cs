@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Numerics;
 using Avalonia.Input;
 using Avalonia.Platform;
@@ -18,6 +17,11 @@ namespace Avalonia.Veldrid
         private readonly Func<GraphicsDevice, Sampler> _samplerFactory;
         private Shader[] _shaders;
         private ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
+        private PointerAdapter _pointerAdapter;
+        private KeyboardAdapter _keyboardAdapter;
+        private WindowsCollectionView _windowsView;
+        private InputModifiersContainer _modifiers;
+        private int _touchCounter = 0;
 
         public AvaloniaVeldridContext(GraphicsDevice graphicsDevice = null, OutputDescription? outputDescription = null,
             IScreenImpl screenImpl = null, IMouseDevice mouseDevice = null, IKeyboardDevice keyboardDevice = null,
@@ -29,7 +33,10 @@ namespace Avalonia.Veldrid
             Screen = screenImpl ?? new VeldridScreenStub();
             MouseDevice = mouseDevice ?? new MouseDevice();
             KeyboardDevice = keyboardDevice ?? new KeyboardDevice();
-
+            TouchDevice = new TouchDevice();
+            _modifiers = new InputModifiersContainer();
+            _pointerAdapter = new PointerAdapter(this, _modifiers);
+            _keyboardAdapter = new KeyboardAdapter(this, _modifiers);
             if (_graphicsDevice != null)
             {
                 OnDeviceCreated();
@@ -90,7 +97,6 @@ namespace Avalonia.Veldrid
                 new ResourceLayoutElementDescription("WindowUniforms", ResourceKind.UniformBuffer, ShaderStages.Vertex),
                 new ResourceLayoutElementDescription("Input", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
                 new ResourceLayoutElementDescription("InputSampler", ResourceKind.Sampler, ShaderStages.Fragment)));
-
             Pipeline = factory.CreateGraphicsPipeline(
                 new GraphicsPipelineDescription(
                     BlendStateDescription.SingleOverrideBlend,
@@ -131,6 +137,7 @@ namespace Avalonia.Veldrid
         public Pipeline Pipeline { get; private set; }
 
         public IMouseDevice MouseDevice { get; }
+        public IInputDevice TouchDevice { get; }
 
         public IKeyboardDevice KeyboardDevice { get; }
 
@@ -145,6 +152,54 @@ namespace Avalonia.Veldrid
 
         public float TexelSize { get; set; } = 0.01f;
         public Sampler Sampler { get; private set; }
+        public KeyboardAdapter KeyboardAdapter => _keyboardAdapter;
+        public PointerAdapter PointerAdapter => _pointerAdapter;
+
+        public RaycastResult? Raycast(ClipSpaceRay ray)
+        {
+            RaycastResult? bestMatch = null;
+            lock (_windowsCollectionLock)
+            {
+                foreach (var window in _windows)
+                {
+                    var res = window.Raycast(ray);
+                    if (res.HasValue)
+                    {
+                        if (!bestMatch.HasValue || res.Value.Distance < bestMatch.Value.Distance)
+                        {
+                            bestMatch = res.Value;
+                        }
+                    }
+                }
+            }
+
+            return bestMatch;
+        }
+
+        public RaycastResult? Project(Vector4 clipSpacePosition)
+        {
+            RaycastResult? bestMatch = null;
+            lock (_windowsCollectionLock)
+            {
+                foreach (var window in _windows)
+                {
+                    var res = window.Project(clipSpacePosition);
+                    if (res.HasValue)
+                    {
+                        if (!bestMatch.HasValue || res.Value.Distance < bestMatch.Value.Distance)
+                        {
+                            bestMatch = res.Value;
+                        }
+                    }
+                }
+            }
+
+            return bestMatch;
+        }
+        public RaycastResult? Project(Vector3 worldPosition)
+        {
+            return Project(Vector4.Transform(worldPosition.ToPositionVec4(), View * Projection));
+        }
 
         public virtual void Dispose()
         {
@@ -190,6 +245,11 @@ namespace Avalonia.Veldrid
             {
                 action();
             }
+        }
+
+        public TouchAdapter CreateTouchAdapter()
+        {
+            return new TouchAdapter(this, ++_touchCounter, _modifiers);
         }
     }
 }

@@ -6,7 +6,14 @@
         x:Class="Avalonia.Veldrid.Sample.PopupWindow"
         Title="PopupWindow"
         Width="120" Height="60">
-    <Button Command="{Binding CloseCommand}">
-        <TextBlock>Close</TextBlock>
-    </Button>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Button Command="{Binding CloseCommand}">
+            <TextBlock>Close</TextBlock>
+        </Button>
+        <Slider Grid.Row="1" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Orientation="Horizontal"></Slider>
+    </Grid>
 </Window>

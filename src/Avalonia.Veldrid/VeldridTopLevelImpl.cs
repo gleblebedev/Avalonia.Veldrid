@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Avalonia.Controls.Platform.Surfaces;
@@ -23,7 +24,7 @@ namespace Avalonia.Veldrid
 
         private Texture _texture;
         private ResourceSet _resrouceSet;
-        private bool _hidden;
+        private bool _isVisible = false;
         private PixelPoint _position;
         private double _scaling = 1;
         private bool _isFullscreen;
@@ -157,6 +158,8 @@ namespace Avalonia.Veldrid
         /// <summary>Gets a mouse device associated with toplevel</summary>
         public virtual IMouseDevice MouseDevice => VeldridContext.MouseDevice;
 
+        public virtual IInputDevice TouchDevice => VeldridContext.TouchDevice;
+
         /// <summary>
         ///     Gets or sets a method called when the toplevel receives input.
         /// </summary>
@@ -184,12 +187,12 @@ namespace Avalonia.Veldrid
 
         public virtual void Show()
         {
-            _hidden = false;
+            _isVisible = true;
         }
 
         public virtual void Hide()
         {
-            _hidden = true;
+            _isVisible = false;
         }
 
         public virtual void Resize(Size clientSize)
@@ -203,7 +206,7 @@ namespace Avalonia.Veldrid
             if (_framebufferSource == null)
                 return;
 
-            if (_hidden)
+            if (!_isVisible)
                 return;
 
             if (IsFullscreen) FireResizedIfNecessary();
@@ -211,6 +214,7 @@ namespace Avalonia.Veldrid
             if (_updateTexture)
             {
                 var clientSize = ClientSize;
+                Debug.WriteLine($"Paint {clientSize}");
                 Paint?.Invoke(new Rect(0, 0, clientSize.Width, clientSize.Height));
             }
 
@@ -245,36 +249,78 @@ namespace Avalonia.Veldrid
             _texelSize = null;
         }
 
-        public RaycastResult? Raycast(ClipSpaceRay ray)
+        public RaycastResult? Project(Vector4 clipSpacePosition)
         {
-            var projection = GetActiveProjection();
-            var view = GetActiveView();
-            var model = GetActiveModel();
+            if (!_isVisible)
+                return null;
 
-            var pvm = model * view * projection;
-            Matrix4x4.Invert(pvm, out var invPVM);
-            var from4 = Vector4.Transform(InvertYIfNotFullscreen(ray.From), invPVM);
-            var from = new Vector3(from4.X, from4.Y, from4.Z) * (1.0f / from4.W);
-            var to4 = Vector4.Transform(InvertYIfNotFullscreen(ray.To), invPVM);
-            var to = new Vector3(to4.X, to4.Y, to4.Z) * (1.0f / to4.W);
-
-            if (from.Z * to.Z > 1e-6f) return null;
-
-            var k = -from.Z / (to.Z - from.Z);
-            if (float.IsNaN(k)) k = 0;
-            var pos = Vector3.Lerp(from, to, k);
+            var mvp = GetModelViewProjection();
+            Matrix4x4.Invert(mvp, out var invMVP);
+            var from4 = Vector4.Transform(InvertYIfNotFullscreen(clipSpacePosition), invMVP);
+            var pos = from4.ToPositionVec3();
             if (pos.X < -1 ||
                 pos.X > 1 ||
                 pos.Y < -1 ||
                 pos.Y > 1)
                 return null;
 
+            var projectionPos = pos;
+            projectionPos.Z = 0;
+            var clipSpacePoint = InvertYIfNotFullscreen(Vector4.Transform(projectionPos.ToPositionVec4(), mvp));
+            var vp = GetContextViewProjection();
+            Matrix4x4.Invert(vp, out var invVP);
+            var worldSpaceFrom = Vector4.Transform(clipSpacePosition, invVP).ToPositionVec3();
+            var worldSpaceHit = Vector4.Transform(clipSpacePoint, invVP).ToPositionVec3();
+            var distance = (worldSpaceHit - worldSpaceFrom).Length();
+
             var clientSize = ClientSize;
-            var clipSpacePoint = Vector4.Transform(pos, pvm);
+            pos = InvertYIfNotFullscreen(pos);
+
             return new RaycastResult
             {
-                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (pos.Y + 1) * 0.5),
-                ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W
+                WindowImpl = this,
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (pos.Y + 1.0) * 0.5),
+                ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
+                WorldSpaceHitPoint = worldSpaceHit,
+                Distance = distance
+            };
+        }
+
+        public RaycastResult? Raycast(ClipSpaceRay ray)
+        {
+            if (!_isVisible)
+                return null;
+            var mvp = GetModelViewProjection();
+            Matrix4x4.Invert(mvp, out var invMVP);
+            var from = Vector4.Transform(InvertYIfNotFullscreen(ray.From), invMVP).ToPositionVec3();
+            var to = Vector4.Transform(InvertYIfNotFullscreen(ray.To), invMVP).ToPositionVec3();
+
+            if (from.Z * to.Z > 1e-6f) return null;
+
+            var k = -from.Z / (to.Z - from.Z);
+            if (float.IsNaN(k)) k = 0;
+            var pos =  Vector3.Lerp(from, to, k);
+            if (pos.X < -1 ||
+                pos.X > 1 ||
+                pos.Y < -1 ||
+                pos.Y > 1)
+                return null;
+
+            var clipSpacePoint = InvertYIfNotFullscreen(Vector4.Transform(pos.ToPositionVec4(), mvp));
+            var vp = GetContextViewProjection();
+            Matrix4x4.Invert(vp, out var invVP);
+            var worldSpaceFrom = Vector4.Transform(ray.From, invVP).ToPositionVec3();
+            var worldSpaceHit = Vector4.Transform(clipSpacePoint, invVP).ToPositionVec3();
+
+            var clientSize = ClientSize;
+            pos = InvertYIfNotFullscreen(pos);
+            return new RaycastResult
+            {
+                WindowImpl = this,
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (pos.Y + 1.0) * 0.5),
+                ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
+                WorldSpaceHitPoint = worldSpaceHit,
+                Distance = (worldSpaceHit - worldSpaceFrom).Length()
             };
         }
 
@@ -366,13 +412,19 @@ namespace Avalonia.Veldrid
         {
         }
 
-        private Vector4 InvertYIfNotFullscreen(Vector4 rayFrom)
+        private Vector4 InvertYIfNotFullscreen(Vector4 pos)
         {
             if (IsFullscreen)
-                return rayFrom;
-            return new Vector4(rayFrom.X, -rayFrom.Y, rayFrom.Z, rayFrom.W);
+                return pos;
+            return new Vector4(pos.X, -pos.Y, pos.Z, pos.W);
         }
 
+        private Vector3 InvertYIfNotFullscreen(Vector3 pos)
+        {
+            if (IsFullscreen)
+                return pos;
+            return new Vector3(pos.X, -pos.Y, pos.Z);
+        }
         private void FireResizedIfNecessary()
         {
             if (_framebufferSource != null)
@@ -388,6 +440,7 @@ namespace Avalonia.Veldrid
             if (_clientSizeCache != size)
             {
                 _clientSizeCache = size;
+                Debug.WriteLine($"Resized({size})");
                 Resized?.Invoke(size);
             }
         }
@@ -410,6 +463,24 @@ namespace Avalonia.Veldrid
         private Matrix4x4 GetActiveProjection()
         {
             return IsFullscreen ? Matrix4x4.Identity : VeldridContext.Projection;
+        }
+
+        private Matrix4x4 GetModelViewProjection()
+        {
+            var projection = GetActiveProjection();
+            var view = GetActiveView();
+            var model = GetActiveModel();
+
+            return model * view * projection;
+        }
+
+
+        private Matrix4x4 GetContextViewProjection()
+        {
+            var projection = VeldridContext.Projection;
+            var view = VeldridContext.View;
+
+            return view * projection;
         }
 
         private void EnsureTexture()

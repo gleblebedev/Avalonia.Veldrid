@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 
 namespace Avalonia.Veldrid
 {
@@ -37,13 +38,22 @@ namespace Avalonia.Veldrid
             Width = width;
             Height = height;
         }
-
+        public FramebufferSize(int width, int height)
+        {
+            Width = (uint)width;
+            Height = (uint)height;
+        }
         public uint Width { get; }
         public uint Height { get; }
 
         public override string ToString()
         {
             return $"{Width}x{Height}";
+        }
+
+        public Vector2 ToVector2()
+        {
+            return new Vector2(Width, Height);
         }
     }
 }
