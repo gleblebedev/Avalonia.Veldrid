@@ -176,14 +176,15 @@ namespace Avalonia.Veldrid
             return bestMatch;
         }
 
-        public RaycastResult? Project(Vector4 clipSpacePosition)
+  
+        public RaycastResult? Project(Vector3 worldPosition)
         {
             RaycastResult? bestMatch = null;
             lock (_windowsCollectionLock)
             {
                 foreach (var window in _windows)
                 {
-                    var res = window.Project(clipSpacePosition);
+                    var res = window.Project(worldPosition);
                     if (res.HasValue)
                     {
                         if (!bestMatch.HasValue || res.Value.Distance < bestMatch.Value.Distance)
@@ -195,10 +196,6 @@ namespace Avalonia.Veldrid
             }
 
             return bestMatch;
-        }
-        public RaycastResult? Project(Vector3 worldPosition)
-        {
-            return Project(Vector4.Transform(worldPosition.ToPositionVec4(), View * Projection));
         }
 
         public virtual void Dispose()

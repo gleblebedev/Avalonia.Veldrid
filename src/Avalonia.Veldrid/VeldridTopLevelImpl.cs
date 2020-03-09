@@ -249,14 +249,19 @@ namespace Avalonia.Veldrid
             _texelSize = null;
         }
 
-        public RaycastResult? Project(Vector4 clipSpacePosition)
+        public RaycastResult? Project(Vector3 worldSpacePosition)
         {
             if (!_isVisible)
                 return null;
 
+            if (IsFullscreen)
+                return null;
+
+            var vp = GetContextViewProjection();
+
             var mvp = GetModelViewProjection();
             Matrix4x4.Invert(mvp, out var invMVP);
-            var from4 = Vector4.Transform(InvertYIfNotFullscreen(clipSpacePosition), invMVP);
+            var from4 = Vector4.Transform(Vector4.Transform(worldSpacePosition, vp), invMVP);
             var pos = from4.ToPositionVec3();
             if (pos.X < -1 ||
                 pos.X > 1 ||
@@ -266,12 +271,10 @@ namespace Avalonia.Veldrid
 
             var projectionPos = pos;
             projectionPos.Z = 0;
-            var clipSpacePoint = InvertYIfNotFullscreen(Vector4.Transform(projectionPos.ToPositionVec4(), mvp));
-            var vp = GetContextViewProjection();
+            var clipSpacePoint = Vector4.Transform(projectionPos.ToPositionVec4(), mvp);
             Matrix4x4.Invert(vp, out var invVP);
-            var worldSpaceFrom = Vector4.Transform(clipSpacePosition, invVP).ToPositionVec3();
             var worldSpaceHit = Vector4.Transform(clipSpacePoint, invVP).ToPositionVec3();
-            var distance = (worldSpaceHit - worldSpaceFrom).Length();
+            var distance = (worldSpaceHit - worldSpacePosition).Length();
 
             var clientSize = ClientSize;
             pos = InvertYIfNotFullscreen(pos);
