@@ -30,7 +30,7 @@ namespace Avalonia.Veldrid
         private double _scaling = 1;
         private bool _isFullscreen;
         private Size _clientSizeCache;
-        private FramebufferSize _framebufferSize = new FramebufferSize(100, 100);
+        private FramebufferSize _framebufferSize;
         private WindowUniforms _uniforms;
         private bool _updateTexture;
         private float? _texelSize;
@@ -38,6 +38,7 @@ namespace Avalonia.Veldrid
         public VeldridTopLevelImpl(AvaloniaVeldridContext veldridContext)
         {
             VeldridContext = veldridContext;
+            _framebufferSize = new FramebufferSize(100, 100);
             VeldridContext.DeviceCreated += OnDeviceCreated;
             VeldridContext.DeviceDestroyed += OnDeviceDestroyed;
 
@@ -64,7 +65,7 @@ namespace Avalonia.Veldrid
                 PixelFormat.Rgba8888,
                 VeldridContext.MipLevels,
                 VeldridContext.AllowNPow2Textures,
-                TextureFramebufferSource.DefaultDpi*4);
+                96);
             _clientSizeCache = ClientSize;
             var sizeInBytes = (uint)Marshal.SizeOf<WindowUniforms>();
             sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
@@ -88,7 +89,7 @@ namespace Avalonia.Veldrid
             }
         }
 
-        public Vector Dpi
+        public double Dpi
         {
             get { return _framebufferSource.Dpi; }
             set
@@ -96,10 +97,14 @@ namespace Avalonia.Veldrid
                 if (_framebufferSource.Dpi != value)
                 {
                     _framebufferSource.Dpi = value;
+                    //FireResizedIfNecessary();
                     Invalidate(new Rect(new Point(0,0), ClientSize));
                 }
             }
         }
+
+        public virtual IScreenImpl Screen => new VeldridScreenStub(Dpi, FramebufferSize);
+
 
         public virtual FramebufferSize FramebufferSize => IsFullscreen ? VeldridContext.ScreenSize : _framebufferSize;
 

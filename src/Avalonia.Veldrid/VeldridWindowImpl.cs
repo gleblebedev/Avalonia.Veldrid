@@ -17,7 +17,6 @@ namespace Avalonia.Veldrid
 
         public virtual IPlatformHandle Handle { get; }
         public virtual Size MaxClientSize => _maxSize;
-        public virtual IScreenImpl Screen => VeldridContext.Screen;
         public Action Deactivated { get; set; }
         public Action Activated { get; set; }
 

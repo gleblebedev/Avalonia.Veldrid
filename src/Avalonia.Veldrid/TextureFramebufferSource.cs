@@ -8,8 +8,6 @@ namespace Avalonia.Veldrid
 {
     public class TextureFramebufferSource : IDisposable
     {
-        public readonly static Vector DefaultDpi = new Vector(96, 96);
-
         private readonly uint _mipLevels;
         private readonly bool _allowNpow2;
         private readonly Lockable _lockable;
@@ -17,7 +15,7 @@ namespace Avalonia.Veldrid
         private FramebufferSize _size;
 
         public TextureFramebufferSource(GraphicsDevice gd, FramebufferSize size,
-            PixelFormat pixelFormat = PixelFormat.Rgba8888, uint mipLevels = 1, bool allowNpow2 = false, Vector? dpi = null)
+            PixelFormat pixelFormat = PixelFormat.Rgba8888, uint mipLevels = 1, bool allowNpow2 = false, double dpi = 96)
         {
             _mipLevels = mipLevels;
             _allowNpow2 = allowNpow2;
@@ -25,7 +23,7 @@ namespace Avalonia.Veldrid
             _lockable = new Lockable(this);
             Format = pixelFormat;
             Size = size;
-            Dpi = dpi ?? DefaultDpi;
+            Dpi = dpi;
 
             switch (Format)
             {
@@ -44,7 +42,7 @@ namespace Avalonia.Veldrid
 
         public GraphicsDevice GraphicsDevice { get; }
 
-        public Vector Dpi { get; set; }
+        public double Dpi { get; set; }
 
         public PixelFormat Format { get; }
 
@@ -144,7 +142,7 @@ namespace Avalonia.Veldrid
 
             public int RowBytes => (int) (_mapping.SizeInBytes / _framebufferSource.GetStagingTexture().Height);
 
-            public Vector Dpi => _framebufferSource.Dpi;
+            public Vector Dpi => new Vector(_framebufferSource.Dpi, _framebufferSource.Dpi);
 
             public PixelFormat Format => _framebufferSource.Format;
 

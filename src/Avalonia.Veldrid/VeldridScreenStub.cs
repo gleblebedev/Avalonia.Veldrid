@@ -1,18 +1,33 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections;
+using System.Collections.Generic;
 using Avalonia.Platform;
 
 namespace Avalonia.Veldrid
 {
-    public class VeldridScreenStub : IScreenImpl
+    public class VeldridScreenStub : IScreenImpl, IReadOnlyList<Screen>
     {
-        private readonly Screen[] _screens;
         private Screen _screen;
 
         public VeldridScreenStub()
         {
-            _screen = new Screen(96, new PixelRect(0, 0, 1920, 1280),
-                new PixelRect(0, 0, 1920, 1280), true);
-            _screens = new[] {_screen};
+            SetScreenSize(96, new FramebufferSize(1920, 1280));
+        }
+
+        public VeldridScreenStub(Screen screen)
+        {
+            _screen = screen;
+        }
+
+        public VeldridScreenStub(double dpi, FramebufferSize framebufferSize)
+        {
+            SetScreenSize(dpi, framebufferSize);
+        }
+
+        private void SetScreenSize(double pixelDensity, FramebufferSize framebufferSize)
+        {
+            _screen = new Screen(pixelDensity,
+                new PixelRect(0, 0, (int) framebufferSize.Width, (int) framebufferSize.Height),
+                new PixelRect(0, 0, (int) framebufferSize.Width, (int) framebufferSize.Height), true);
         }
 
         public FramebufferSize Size
@@ -20,14 +35,28 @@ namespace Avalonia.Veldrid
             get => new FramebufferSize((uint) _screen.WorkingArea.Width, (uint) _screen.WorkingArea.Height);
             set
             {
-                _screen = new Screen(96, new PixelRect(0, 0, (int) value.Width, (int) value.Height),
-                    new PixelRect(0, 0, (int) value.Width, (int) value.Height), true);
-                _screens[0] = _screen;
+                SetScreenSize(_screen.PixelDensity, value);
             }
         }
 
-        int IScreenImpl.ScreenCount => _screens.Length;
+        public Screen Screen => _screen;
 
-        IReadOnlyList<Screen> IScreenImpl.AllScreens => _screens;
+        int IScreenImpl.ScreenCount => 1;
+
+        IReadOnlyList<Screen> IScreenImpl.AllScreens => this;
+
+        public IEnumerator<Screen> GetEnumerator()
+        {
+            yield return _screen;
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        int IReadOnlyCollection<Screen>.Count => 1;
+
+        Screen IReadOnlyList<Screen>.this[int index] => _screen;
     }
 }
