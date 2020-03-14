@@ -21,6 +21,7 @@ namespace Avalonia.Veldrid.DesktopSample
         private static Sdl2Window _window;
         private static Sdl2KeyboardAdapter _keyboard;
         private static Sdl2MouseAdapter _pointer;
+        private static bool _windowResized;
 
         private static int Main(string[] args)
         {
@@ -43,12 +44,13 @@ namespace Avalonia.Veldrid.DesktopSample
             {
                 X = 100,
                 Y = 100,
-                WindowWidth = 960,
-                WindowHeight = 540,
+                WindowWidth = 1280,
+                WindowHeight = 720,
                 WindowTitle = "Veldrid Tutorial",
                 WindowInitialState = options.Value.WindowState
             };
             _window = VeldridStartup.CreateWindow(ref windowCI);
+            _window.Resized += () => { _windowResized = true; };
 
             var graphicsDeviceOptions = new GraphicsDeviceOptions() { PreferStandardClipSpaceYDirection = true };
             if (options.Value.GraphicsBackend.HasValue)
@@ -83,6 +85,12 @@ namespace Avalonia.Veldrid.DesktopSample
                 if (_window.Exists)
                 {
                     _veldridContext.PurgeMainThreadQueue();
+                    if (_windowResized)
+                    {
+                        _windowResized = false;
+                        _graphicsDevice.ResizeMainWindow((uint)_window.Width, (uint)_window.Height);
+                    }
+
                     Draw();
                 }
             }

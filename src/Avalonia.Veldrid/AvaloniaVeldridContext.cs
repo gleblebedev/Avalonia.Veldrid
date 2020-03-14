@@ -5,6 +5,7 @@ using System.Numerics;
 using Avalonia.Input;
 using Avalonia.Platform;
 using Veldrid;
+using PixelFormat = Avalonia.Platform.PixelFormat;
 
 namespace Avalonia.Veldrid
 {
@@ -46,6 +47,7 @@ namespace Avalonia.Veldrid
         private Sampler DefaultSamplerFactory(GraphicsDevice graphicsDevice)
         {
             return graphicsDevice.Aniso4xSampler;
+            //return graphicsDevice.PointSampler;
         }
 
         /// <summary>
@@ -154,6 +156,8 @@ namespace Avalonia.Veldrid
         public Sampler Sampler { get; private set; }
         public KeyboardAdapter KeyboardAdapter => _keyboardAdapter;
         public PointerAdapter PointerAdapter => _pointerAdapter;
+        public bool AllowNPow2Textures { get; set; } = false;
+        public uint MipLevels { get; set; } = 2;
 
         public RaycastResult? Raycast(ClipSpaceRay ray)
         {

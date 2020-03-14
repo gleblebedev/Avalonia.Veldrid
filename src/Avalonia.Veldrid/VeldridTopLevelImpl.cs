@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Rendering;
 using Avalonia.Veldrid.Uniforms;
 using Veldrid;
+using PixelFormat = Avalonia.Platform.PixelFormat;
 
 namespace Avalonia.Veldrid
 {
@@ -57,7 +58,13 @@ namespace Avalonia.Veldrid
 
         private void OnDeviceCreated(GraphicsDevice obj)
         {
-            _framebufferSource = new TextureFramebufferSource(VeldridContext.GraphicsDevice, _framebufferSize);
+            _framebufferSource = new TextureFramebufferSource(
+                VeldridContext.GraphicsDevice,
+                _framebufferSize,
+                PixelFormat.Rgba8888,
+                VeldridContext.MipLevels,
+                VeldridContext.AllowNPow2Textures,
+                TextureFramebufferSource.DefaultDpi*4);
             _clientSizeCache = ClientSize;
             var sizeInBytes = (uint)Marshal.SizeOf<WindowUniforms>();
             sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
@@ -77,6 +84,19 @@ namespace Avalonia.Veldrid
                 {
                     _position = value;
                     PositionChanged?.Invoke(_position);
+                }
+            }
+        }
+
+        public Vector Dpi
+        {
+            get { return _framebufferSource.Dpi; }
+            set
+            {
+                if (_framebufferSource.Dpi != value)
+                {
+                    _framebufferSource.Dpi = value;
+                    Invalidate(new Rect(new Point(0,0), ClientSize));
                 }
             }
         }
@@ -214,7 +234,6 @@ namespace Avalonia.Veldrid
             if (_updateTexture)
             {
                 var clientSize = ClientSize;
-                Debug.WriteLine($"Paint {clientSize}");
                 Paint?.Invoke(new Rect(0, 0, clientSize.Width, clientSize.Height));
             }
 
@@ -234,7 +253,8 @@ namespace Avalonia.Veldrid
                 {
                     var stagingTexture = _framebufferSource.GetStagingTexture();
                     commandList.CopyTexture(stagingTexture, _texture, 0, 0);
-                    commandList.GenerateMipmaps(_texture);
+                    if (stagingTexture.MipLevels > 1)
+                        commandList.GenerateMipmaps(_texture);
                     _updateTexture = false;
                 }
 
@@ -443,7 +463,6 @@ namespace Avalonia.Veldrid
             if (_clientSizeCache != size)
             {
                 _clientSizeCache = size;
-                Debug.WriteLine($"Resized({size})");
                 Resized?.Invoke(size);
             }
         }
@@ -504,8 +523,10 @@ namespace Avalonia.Veldrid
                         stagingTexture.MipLevels,
                         stagingTexture.ArrayLayers,
                         stagingTexture.Format,
-                        TextureUsage.Sampled | TextureUsage.GenerateMipmaps,
+                        TextureUsage.Sampled,
                         stagingTexture.Type);
+                    if (stagingTexture.MipLevels > 1)
+                        textureDescription.Usage |= TextureUsage.GenerateMipmaps;
                     _texture = factory.CreateTexture(textureDescription);
                     _resrouceSet = factory.CreateResourceSet(new ResourceSetDescription(
                         VeldridContext.TextureResourceLayout, _uniformBuffer, _texture,

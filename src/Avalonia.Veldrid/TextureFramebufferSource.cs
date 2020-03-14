@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using Avalonia.Platform;
 using Veldrid;
 using PixelFormat = Avalonia.Platform.PixelFormat;
@@ -10,17 +8,24 @@ namespace Avalonia.Veldrid
 {
     public class TextureFramebufferSource : IDisposable
     {
+        public readonly static Vector DefaultDpi = new Vector(96, 96);
+
+        private readonly uint _mipLevels;
+        private readonly bool _allowNpow2;
         private readonly Lockable _lockable;
         private Texture _texture;
         private FramebufferSize _size;
 
         public TextureFramebufferSource(GraphicsDevice gd, FramebufferSize size,
-            PixelFormat pixelFormat = PixelFormat.Rgba8888)
+            PixelFormat pixelFormat = PixelFormat.Rgba8888, uint mipLevels = 1, bool allowNpow2 = false, Vector? dpi = null)
         {
+            _mipLevels = mipLevels;
+            _allowNpow2 = allowNpow2;
             GraphicsDevice = gd;
             _lockable = new Lockable(this);
             Format = pixelFormat;
             Size = size;
+            Dpi = dpi ?? DefaultDpi;
 
             switch (Format)
             {
@@ -39,7 +44,7 @@ namespace Avalonia.Veldrid
 
         public GraphicsDevice GraphicsDevice { get; }
 
-        public Vector Dpi => new Vector(96, 96);
+        public Vector Dpi { get; set; }
 
         public PixelFormat Format { get; }
 
@@ -49,11 +54,20 @@ namespace Avalonia.Veldrid
             set
             {
                 _size = value;
-                TextureSize = new FramebufferSize(NextPowerOf2(_size.Width), NextPowerOf2(_size.Height));
+                if (_allowNpow2)
+                {
+                    TextureSize = _size;
+                }
+                else
+                {
+                    var width = NextPowerOf2(_size.Width);
+                    var height = NextPowerOf2(_size.Height);
+                    TextureSize = new FramebufferSize(width, height);
+                }
             }
         }
 
-        public FramebufferSize TextureSize { get; set; }
+        public FramebufferSize TextureSize { get; private set; }
 
         public Vector2 ViewportSize
         {
@@ -71,11 +85,10 @@ namespace Avalonia.Veldrid
             if (_texture == null || _texture.Width != framebufferSize.Width ||
                 _texture.Height != framebufferSize.Height)
             {
-                Debug.WriteLine($"New framebuffer size {framebufferSize}");
                 _texture?.Dispose();
                 var factory = GraphicsDevice.ResourceFactory;
                 _texture = factory.CreateTexture(new TextureDescription(framebufferSize.Width, framebufferSize.Height,
-                    1, 1, 1,
+                    1, _mipLevels, 1,
                     VeldridFormat, TextureUsage.Staging, TextureType.Texture2D));
             }
 
@@ -143,9 +156,58 @@ namespace Avalonia.Veldrid
 
             public void Dispose()
             {
+                SaveFramebuffer();
                 _framebufferSource.GraphicsDevice.Unmap(_framebufferSource.GetStagingTexture());
                 _mapping = new MappedResourceView<byte>();
             }
+
+#if DEBUG_FRAMEBUFFER
+            private int _tgaCounter = 0;
+
+            private void SaveFramebuffer()
+            {
+                var name = "Framebuffer"+_tgaCounter+".tga";
+                ++_tgaCounter;
+                var stagingTexture = _framebufferSource.GetStagingTexture();
+                var rowBytes = RowBytes;
+                using (var f = File.Create(name))
+                {
+                    using (var w = new BinaryWriter(f))
+                    {
+                        w.Write((byte)0);
+                        w.Write((byte)0);
+                        w.Write((byte)2);
+                        w.Write((ushort)0);
+                        w.Write((ushort)0);
+                        w.Write((byte)0);
+                        w.Write((ushort)0);
+                        w.Write((ushort)0);
+                        var width = stagingTexture.Width;
+                        w.Write((byte)(width & 0x0FF));
+                        w.Write((byte)((width>>8) & 0x0FF));
+                        var height= stagingTexture.Height;
+                        w.Write((byte)(height & 0x0FF));
+                        w.Write((byte)((height >> 8) & 0x0FF));
+                        w.Write((byte)32);
+                        w.Write((byte)0);
+                        for (int y = (int)height-1; y >= 0; --y)
+                        {
+                            for (uint x = 0; x < width; ++x)
+                            {
+                                w.Write(_mapping[(int)(x * 4 + y * rowBytes + 0)]);
+                                w.Write(_mapping[(int)(x * 4 + y * rowBytes + 1)]);
+                                w.Write(_mapping[(int)(x * 4 + y * rowBytes + 2)]);
+                                w.Write(_mapping[(int)(x * 4 + y * rowBytes + 3)]);
+                            }
+                        }
+                    }
+                }
+            }
+#else
+            private void SaveFramebuffer()
+            {
+            }
+#endif
         }
     }
 }
