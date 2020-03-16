@@ -21,6 +21,7 @@ namespace Avalonia.Veldrid.Sample
             var pos = new Vector3(((float) rnd.NextDouble() - 0.5f) * 5, ((float) rnd.NextDouble() - 0.5f) * 5,
                 ((float) rnd.NextDouble() - 0.5f) * 5);
             VeldridProperty.TrySetWorldTransform(w, Matrix4x4.CreateTranslation(pos));
+            VeldridProperty.TrySetDpi(w, 96*4);
             w.Show();
         }
     }

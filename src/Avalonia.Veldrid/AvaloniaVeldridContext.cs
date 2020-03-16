@@ -157,7 +157,7 @@ namespace Avalonia.Veldrid
         public KeyboardAdapter KeyboardAdapter => _keyboardAdapter;
         public PointerAdapter PointerAdapter => _pointerAdapter;
         public bool AllowNPow2Textures { get; set; } = false;
-        public uint MipLevels { get; set; } = 2;
+        public uint MipLevels { get; set; } = 4;
 
         public RaycastResult? Raycast(ClipSpaceRay ray)
         {

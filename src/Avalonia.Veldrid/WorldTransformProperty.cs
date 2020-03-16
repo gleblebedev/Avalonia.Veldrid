@@ -31,6 +31,16 @@ namespace Avalonia.Veldrid
             transform = Matrix4x4.Identity;
             return false;
         }
+        public static bool TrySetDpi(Window window, float dpi)
+        {
+            if (window?.PlatformImpl is VeldridTopLevelImpl impl)
+            {
+                impl.Dpi = dpi;
+                return true;
+            }
+
+            return false;
+        }
         public static bool TrySetTexelSize(Window window, float size)
         {
             if (window?.PlatformImpl is VeldridTopLevelImpl impl)

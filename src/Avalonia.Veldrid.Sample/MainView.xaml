@@ -6,8 +6,7 @@
              x:Class="Avalonia.Veldrid.Sample.MainView">
     <StackPanel>
         <TextBlock>Welcome to Avalonia!</TextBlock>
-        <TextBlock> Test rendering test: اَلْعَرَبِيَّةُ</TextBlock>
-        <TextBlock> Test rendering test: עִבְרִית</TextBlock>
+        <TextBlock> Font test: اَلْعَرَبِيَّةُ, 简化字, עִבְרִית</TextBlock>
 
         <Button Command="{Binding TestCommand}">
             <TextBlock>Test button</TextBlock>

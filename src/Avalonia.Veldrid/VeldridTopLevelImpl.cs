@@ -27,13 +27,13 @@ namespace Avalonia.Veldrid
         private ResourceSet _resrouceSet;
         private bool _isVisible = false;
         private PixelPoint _position;
-        private double _scaling = 1;
         private bool _isFullscreen;
         private Size _clientSizeCache;
         private FramebufferSize _framebufferSize;
         private WindowUniforms _uniforms;
         private bool _updateTexture;
         private float? _texelSize;
+        private double _dpi = 96.0;
 
         public VeldridTopLevelImpl(AvaloniaVeldridContext veldridContext)
         {
@@ -65,7 +65,7 @@ namespace Avalonia.Veldrid
                 PixelFormat.Rgba8888,
                 VeldridContext.MipLevels,
                 VeldridContext.AllowNPow2Textures,
-                96);
+                Dpi);
             _clientSizeCache = ClientSize;
             var sizeInBytes = (uint)Marshal.SizeOf<WindowUniforms>();
             sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
@@ -91,14 +91,20 @@ namespace Avalonia.Veldrid
 
         public double Dpi
         {
-            get { return _framebufferSource.Dpi; }
+            get { return _dpi; }
             set
             {
-                if (_framebufferSource.Dpi != value)
+                if (_dpi != value)
                 {
-                    _framebufferSource.Dpi = value;
-                    //FireResizedIfNecessary();
-                    Invalidate(new Rect(new Point(0,0), ClientSize));
+                    var clientSize = ClientSize;
+                    _dpi = value;
+                    if (_framebufferSource != null)
+                    {
+                        _framebufferSource.Dpi = value;
+                    }
+                    Resize(clientSize);
+                    ScalingChanged?.Invoke(Scaling);
+                    //Invalidate(new Rect(new Point(0,0), ClientSize));
                 }
             }
         }
@@ -145,7 +151,7 @@ namespace Avalonia.Veldrid
             get
             {
                 var framebufferSize = FramebufferSize;
-                return new Size(framebufferSize.Width, framebufferSize.Height);
+                return new Size(framebufferSize.Width / Scaling, framebufferSize.Height / Scaling);
             }
         }
 
@@ -154,13 +160,13 @@ namespace Avalonia.Veldrid
         /// </summary>
         public virtual double Scaling
         {
-            get => _scaling;
+            get => _framebufferSource.Dpi/96.0;
             set
             {
-                if (_scaling != value)
+                var scaling = Scaling;
+                if (scaling != value)
                 {
-                    _scaling = value;
-                    ScalingChanged?.Invoke(_scaling);
+                    Dpi = 96.0 * value;
                 }
             }
         }
@@ -222,13 +228,17 @@ namespace Avalonia.Veldrid
 
         public virtual void Resize(Size clientSize)
         {
-            _framebufferSize = new FramebufferSize((uint) clientSize.Width, (uint) clientSize.Height);
+            var scaling = Scaling;
+            _framebufferSize = new FramebufferSize((uint) (clientSize.Width * scaling), (uint) (clientSize.Height * scaling));
             FireResizedIfNecessary();
         }
 
         public virtual void Render(CommandList commandList)
         {
             if (_framebufferSource == null)
+                return;
+
+            if (_framebufferSource.Size == new FramebufferSize(0,0))
                 return;
 
             if (!_isVisible)
@@ -482,8 +492,9 @@ namespace Avalonia.Veldrid
             if (IsFullscreen)
                 return _fullScreenModel;
 
-            var clientSize = FramebufferSize;
-            var scale = Matrix4x4.CreateScale(clientSize.Width * TexelSize, clientSize.Height * TexelSize, 1.0f);
+            var clientSize = ClientSize;
+            var texelSize = TexelSize*0.5f;
+            var scale = Matrix4x4.CreateScale((float)clientSize.Width * texelSize, (float)clientSize.Height * texelSize, 1.0f);
             return scale*WorldTransform;
         }
 

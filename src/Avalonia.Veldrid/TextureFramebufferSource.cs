@@ -51,6 +51,8 @@ namespace Avalonia.Veldrid
             get => _size;
             set
             {
+                if (value.Width == 0 || value.Height == 0)
+                    throw new ArgumentOutOfRangeException("Size can't be zero");
                 _size = value;
                 if (_allowNpow2)
                 {
@@ -85,8 +87,21 @@ namespace Avalonia.Veldrid
             {
                 _texture?.Dispose();
                 var factory = GraphicsDevice.ResourceFactory;
+                int mipLevels = (int)_mipLevels;
+                while (mipLevels > 0)
+                {
+                    uint size = 1u << (mipLevels-1);
+                    if (size <= framebufferSize.Width && size <= framebufferSize.Height)
+                    {
+                        break;
+                    }
+
+                    --mipLevels;
+                }
+
+                if (mipLevels == 0) mipLevels = 1;
                 _texture = factory.CreateTexture(new TextureDescription(framebufferSize.Width, framebufferSize.Height,
-                    1, _mipLevels, 1,
+                    1, (uint)mipLevels, 1,
                     VeldridFormat, TextureUsage.Staging, TextureType.Texture2D));
             }
 
