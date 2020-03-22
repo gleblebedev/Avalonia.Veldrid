@@ -2,9 +2,9 @@
 
   <PropertyGroup>
 <!--
-    <VeldridVersion>4.7.0-ga18a4566c3</VeldridVersion>
--->
     <VeldridVersion>4.7.0</VeldridVersion>
+-->
+    <VeldridVersion>4.7.0-ga18a4566c3</VeldridVersion>
   </PropertyGroup>
 
 </Project>

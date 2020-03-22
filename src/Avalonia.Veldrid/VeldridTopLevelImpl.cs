@@ -160,7 +160,7 @@ namespace Avalonia.Veldrid
         /// </summary>
         public virtual double Scaling
         {
-            get => _framebufferSource.Dpi/96.0;
+            get => _dpi/96.0;
             set
             {
                 var scaling = Scaling;
@@ -312,12 +312,11 @@ namespace Avalonia.Veldrid
             var distance = (worldSpaceHit - worldSpacePosition).Length();
 
             var clientSize = ClientSize;
-            pos = InvertYIfNotFullscreen(pos);
 
             return new RaycastResult
             {
                 WindowImpl = this,
-                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (pos.Y + 1.0) * 0.5),
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (-pos.Y + 1.0) * 0.5),
                 ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
                 WorldSpaceHitPoint = worldSpaceHit,
                 Distance = distance
@@ -330,8 +329,8 @@ namespace Avalonia.Veldrid
                 return null;
             var mvp = GetModelViewProjection();
             Matrix4x4.Invert(mvp, out var invMVP);
-            var from = Vector4.Transform(InvertYIfNotFullscreen(ray.From), invMVP).ToPositionVec3();
-            var to = Vector4.Transform(InvertYIfNotFullscreen(ray.To), invMVP).ToPositionVec3();
+            var from = Vector4.Transform(ray.From, invMVP).ToPositionVec3();
+            var to = Vector4.Transform(ray.To, invMVP).ToPositionVec3();
 
             if (from.Z * to.Z > 1e-6f) return null;
 
@@ -344,18 +343,17 @@ namespace Avalonia.Veldrid
                 pos.Y > 1)
                 return null;
 
-            var clipSpacePoint = InvertYIfNotFullscreen(Vector4.Transform(pos.ToPositionVec4(), mvp));
+            var clipSpacePoint = Vector4.Transform(pos.ToPositionVec4(), mvp);
             var vp = GetContextViewProjection();
             Matrix4x4.Invert(vp, out var invVP);
             var worldSpaceFrom = Vector4.Transform(ray.From, invVP).ToPositionVec3();
             var worldSpaceHit = Vector4.Transform(clipSpacePoint, invVP).ToPositionVec3();
 
             var clientSize = ClientSize;
-            pos = InvertYIfNotFullscreen(pos);
             return new RaycastResult
             {
                 WindowImpl = this,
-                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (pos.Y + 1.0) * 0.5),
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (-pos.Y + 1.0) * 0.5),
                 ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
                 WorldSpaceHitPoint = worldSpaceHit,
                 Distance = (worldSpaceHit - worldSpaceFrom).Length()
@@ -450,19 +448,6 @@ namespace Avalonia.Veldrid
         {
         }
 
-        private Vector4 InvertYIfNotFullscreen(Vector4 pos)
-        {
-            if (IsFullscreen)
-                return pos;
-            return new Vector4(pos.X, -pos.Y, pos.Z, pos.W);
-        }
-
-        private Vector3 InvertYIfNotFullscreen(Vector3 pos)
-        {
-            if (IsFullscreen)
-                return pos;
-            return new Vector3(pos.X, -pos.Y, pos.Z);
-        }
         private void FireResizedIfNecessary()
         {
             if (_framebufferSource != null)

@@ -23,6 +23,13 @@ namespace Avalonia.Veldrid
         public VeldridTopLevelImpl ActiveWindow => _lastProjectionResult.WindowImpl;
         public Vector3 HitPoint => _lastProjectionResult.WorldSpaceHitPoint;
 
+        public void Move(Vector3 raycaseFrom, Vector3 raycastTo)
+        {
+            var matrix = _context.View*_context.Projection;
+            var ray = new ClipSpaceRay(raycaseFrom, raycastTo, matrix);
+            Move(_context.Raycast(ray));
+        }
+
         public void Move(Vector3 worldPosition)
         {
             bool useRaycast = false;
@@ -30,20 +37,25 @@ namespace Avalonia.Veldrid
             if (useRaycast)
             {
                 var clipSpace = Vector4.Transform(worldPosition.ToPositionVec4(), _context.View * _context.Projection);
-                res = _context.Raycast(new ClipSpaceRay()
+                Move(_context.Raycast(new ClipSpaceRay()
                 {
                     From = clipSpace,
                     To = clipSpace + Vector4.UnitZ
-                });
+                }));
             }
             else
             {
                 res = _context.Project(worldPosition);
+                if (res.HasValue && res.Value.Distance > 0.03f)
+                {
+                    res = null;
+                }
+                Move(res);
             }
-            if (res.HasValue && res.Value.Distance > 0.03f)
-            {
-                res = null;
-            }
+        }
+
+        private void Move(RaycastResult? res)
+        {
             if (!res.HasValue)
             {
                 RaiseEvent(RawPointerEventType.TouchEnd);
@@ -68,7 +80,11 @@ namespace Avalonia.Veldrid
 
         public void Dispose()
         {
-            
+            if (this.ActiveWindow != null)
+            {
+                RaiseEvent(RawPointerEventType.TouchEnd);
+                _lastProjectionResult.WindowImpl = null;
+            }
         }
         private void RaiseEvent(RawPointerEventType rawPointerEventType)
         {
