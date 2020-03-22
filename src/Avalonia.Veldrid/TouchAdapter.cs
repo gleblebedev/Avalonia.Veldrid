@@ -23,14 +23,24 @@ namespace Avalonia.Veldrid
         public VeldridTopLevelImpl ActiveWindow => _lastProjectionResult.WindowImpl;
         public Vector3 HitPoint => _lastProjectionResult.WorldSpaceHitPoint;
 
-        public void Move(Vector3 raycaseFrom, Vector3 raycastTo)
+        /// <summary>
+        /// Move touch as a ray in 3D space.
+        /// </summary>
+        /// <param name="from">Origin of the ray.</param>
+        /// <param name="to">Target of the ray (not direction!).</param>
+        public void Move(Vector3 @from, Vector3 to)
         {
             var matrix = _context.View*_context.Projection;
-            var ray = new ClipSpaceRay(raycaseFrom, raycastTo, matrix);
+            var ray = new ClipSpaceRay(@from, to, matrix);
             Move(_context.Raycast(ray));
         }
 
-        public void Move(Vector3 worldPosition)
+        /// <summary>
+        /// Move touch as a point in space with a certain tolerance distance.
+        /// </summary>
+        /// <param name="worldPosition">Position of the touch (tip of a finger) in world space.</param>
+        /// <param name="toleranceInMeters">Distance to window at which touch is registered.</param>
+        public void Move(Vector3 worldPosition, float toleranceInMeters = 0.03f)
         {
             bool useRaycast = false;
             RaycastResult? res;
@@ -46,7 +56,7 @@ namespace Avalonia.Veldrid
             else
             {
                 res = _context.Project(worldPosition);
-                if (res.HasValue && res.Value.Distance > 0.03f)
+                if (res.HasValue && res.Value.Distance > toleranceInMeters)
                 {
                     res = null;
                 }

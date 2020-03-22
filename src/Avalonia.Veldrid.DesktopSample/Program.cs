@@ -84,7 +84,7 @@ namespace Avalonia.Veldrid.DesktopSample
                 _window.PumpEvents();
                 if (_window.Exists)
                 {
-                    _veldridContext.PurgeMainThreadQueue();
+                    _veldridContext.ProcessMainThreadQueue();
                     if (_windowResized)
                     {
                         _windowResized = false;

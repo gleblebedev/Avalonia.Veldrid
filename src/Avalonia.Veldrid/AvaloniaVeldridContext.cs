@@ -240,7 +240,7 @@ namespace Avalonia.Veldrid
             _mainThreadActions.Enqueue(action);
         }
 
-        public void PurgeMainThreadQueue()
+        public void ProcessMainThreadQueue()
         {
             while (_mainThreadActions.TryDequeue(out Action action))
             {

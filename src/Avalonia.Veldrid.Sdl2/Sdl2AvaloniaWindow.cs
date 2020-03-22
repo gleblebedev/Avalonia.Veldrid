@@ -131,7 +131,7 @@
 //                        _gd.ResizeMainWindow((uint) _window.Width, (uint) _window.Height);
 //                        //Resized?.Invoke(new Size(_window.FramebufferWidth, _window.FramebufferHeight));
 //                    }
-//                    _context.PurgeMainThreadQueue();
+//                    _context.ProcessMainThreadQueue();
 //                    //Paint?.Invoke(new Rect(0, 0, _window.FramebufferWidth, _window.FramebufferHeight));
 //                    _cl.Begin();
 //                    _cl.SetFramebuffer(_gd.MainSwapchain.Framebuffer);
