@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 
 namespace Avalonia.Veldrid
 {
@@ -8,12 +7,10 @@ namespace Avalonia.Veldrid
         public PortableAppBuilder() : base(new StandardRuntimePlatform(),
             builder => StandardRuntimePlatformServices.Register(builder.Instance?.GetType()?.Assembly))
         {
-
         }
 
         public void UseContext(AvaloniaVeldridContext veldridContext)
         {
-            
         }
     }
 }

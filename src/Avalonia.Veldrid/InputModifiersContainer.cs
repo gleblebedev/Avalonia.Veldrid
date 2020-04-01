@@ -4,17 +4,16 @@ namespace Avalonia.Veldrid
 {
     public class InputModifiersContainer
     {
-        private RawInputModifiers _inputModifiers = RawInputModifiers.None;
+        public RawInputModifiers Modifiers { get; private set; } = RawInputModifiers.None;
 
         public void Set(RawInputModifiers flag)
         {
-            _inputModifiers |= flag;
+            Modifiers |= flag;
         }
 
         public void Drop(RawInputModifiers flag)
         {
-            _inputModifiers &= ~flag;
+            Modifiers &= ~flag;
         }
-        public RawInputModifiers Modifiers => _inputModifiers;
     }
 }

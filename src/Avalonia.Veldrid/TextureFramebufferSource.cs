@@ -15,7 +15,8 @@ namespace Avalonia.Veldrid
         private FramebufferSize _size;
 
         public TextureFramebufferSource(GraphicsDevice gd, FramebufferSize size,
-            PixelFormat pixelFormat = PixelFormat.Rgba8888, uint mipLevels = 1, bool allowNpow2 = false, double dpi = 96)
+            PixelFormat pixelFormat = PixelFormat.Rgba8888, uint mipLevels = 1, bool allowNpow2 = false,
+            double dpi = 96)
         {
             _mipLevels = mipLevels;
             _allowNpow2 = allowNpow2;
@@ -87,21 +88,18 @@ namespace Avalonia.Veldrid
             {
                 _texture?.Dispose();
                 var factory = GraphicsDevice.ResourceFactory;
-                int mipLevels = (int)_mipLevels;
+                var mipLevels = (int) _mipLevels;
                 while (mipLevels > 0)
                 {
-                    uint size = 1u << (mipLevels-1);
-                    if (size <= framebufferSize.Width && size <= framebufferSize.Height)
-                    {
-                        break;
-                    }
+                    var size = 1u << (mipLevels - 1);
+                    if (size <= framebufferSize.Width && size <= framebufferSize.Height) break;
 
                     --mipLevels;
                 }
 
                 if (mipLevels == 0) mipLevels = 1;
                 _texture = factory.CreateTexture(new TextureDescription(framebufferSize.Width, framebufferSize.Height,
-                    1, (uint)mipLevels, 1,
+                    1, (uint) mipLevels, 1,
                     VeldridFormat, TextureUsage.Staging, TextureType.Texture2D));
             }
 
@@ -198,7 +196,7 @@ namespace Avalonia.Veldrid
                         var width = stagingTexture.Width;
                         w.Write((byte)(width & 0x0FF));
                         w.Write((byte)((width>>8) & 0x0FF));
-                        var height= stagingTexture.Height;
+                        var height = stagingTexture.Height;
                         w.Write((byte)(height & 0x0FF));
                         w.Write((byte)((height >> 8) & 0x0FF));
                         w.Write((byte)32);

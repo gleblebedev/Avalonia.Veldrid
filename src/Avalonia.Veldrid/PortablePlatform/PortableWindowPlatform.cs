@@ -7,10 +7,13 @@ using Avalonia.Skia;
 
 namespace Avalonia.Veldrid
 {
-    public class PortableWindowPlatform: PlatformThreadingInterfaceBase, IPlatformSettings, IWindowingPlatform
+    public class PortableWindowPlatform : PlatformThreadingInterfaceBase, IPlatformSettings, IWindowingPlatform
     {
         private static readonly PortableWindowPlatform s_instance = new PortableWindowPlatform();
         private static AvaloniaVeldridContext _context;
+
+        public Size DoubleClickSize { get; } = new Size(2, 2);
+        public TimeSpan DoubleClickTime { get; } = TimeSpan.FromSeconds(0.5);
 
         public static void Initialize(AvaloniaVeldridContext context)
         {
@@ -36,8 +39,6 @@ namespace Avalonia.Veldrid
         {
         }
 
-        public Size DoubleClickSize { get; } = new Size(2, 2);
-        public TimeSpan DoubleClickTime { get; } = TimeSpan.FromSeconds(0.5);
         public IWindowImpl CreateWindow()
         {
             return new VeldridWindowImpl(_context);

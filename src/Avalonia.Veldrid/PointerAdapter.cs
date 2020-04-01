@@ -4,11 +4,11 @@ using Avalonia.Input.Raw;
 
 namespace Avalonia.Veldrid
 {
-    public class PointerAdapter: InputAdapterBase
+    public class PointerAdapter : InputAdapterBase
     {
         private readonly AvaloniaVeldridContext _context;
         private RaycastResult _lastRaycastResult;
-        private InputModifiersContainer _inputModifiers;
+        private readonly InputModifiersContainer _inputModifiers;
 
         internal PointerAdapter(AvaloniaVeldridContext context, InputModifiersContainer inputModifiers)
         {
@@ -36,10 +36,7 @@ namespace Avalonia.Veldrid
                     break;
             }
 
-            if (_lastRaycastResult.WindowImpl == null)
-            {
-                return;
-            }
+            if (_lastRaycastResult.WindowImpl == null) return;
 
             _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(eventType));
         }
@@ -64,25 +61,18 @@ namespace Avalonia.Veldrid
                     break;
             }
 
-            if (_lastRaycastResult.WindowImpl == null)
-            {
-                return;
-            }
+            if (_lastRaycastResult.WindowImpl == null) return;
 
             _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(eventType));
         }
 
         public void OnEntered()
         {
-            
         }
 
         public void OnLeft()
         {
-            if (_lastRaycastResult.WindowImpl == null)
-            {
-                return;
-            }
+            if (_lastRaycastResult.WindowImpl == null) return;
 
             _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(RawPointerEventType.LeaveWindow));
         }
@@ -96,10 +86,9 @@ namespace Avalonia.Veldrid
 
             var raycastResult = res.Value;
             if (raycastResult.WindowImpl != _lastRaycastResult.WindowImpl)
-            {
                 if (_lastRaycastResult.WindowImpl != null)
-                    _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(RawPointerEventType.LeaveWindow));
-            }
+                    _lastRaycastResult.WindowImpl.Input?.Invoke(
+                        CreatePointerEventArgs(RawPointerEventType.LeaveWindow));
             _lastRaycastResult = raycastResult;
             RaiseEvent(RawPointerEventType.Move);
         }
@@ -107,15 +96,14 @@ namespace Avalonia.Veldrid
         private void RaiseEvent(RawPointerEventType rawPointerEventType)
         {
             var windowImpl = _lastRaycastResult.WindowImpl;
-            if (windowImpl != null)
-            {
-                windowImpl.Input?.Invoke(CreatePointerEventArgs(rawPointerEventType));
-            }
+            if (windowImpl != null) windowImpl.Input?.Invoke(CreatePointerEventArgs(rawPointerEventType));
         }
 
         private RawPointerEventArgs CreatePointerEventArgs(RawPointerEventType type)
         {
-            return new RawPointerEventArgs(_lastRaycastResult.WindowImpl.MouseDevice, GetTimestamp(), _lastRaycastResult.WindowImpl.InputRoot, type, _lastRaycastResult.WindowPoint, _inputModifiers.Modifiers);
+            return new RawPointerEventArgs(_lastRaycastResult.WindowImpl.MouseDevice, GetTimestamp(),
+                _lastRaycastResult.WindowImpl.InputRoot, type, _lastRaycastResult.WindowPoint,
+                _inputModifiers.Modifiers);
         }
     }
 }

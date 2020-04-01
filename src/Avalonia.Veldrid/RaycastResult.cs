@@ -4,10 +4,12 @@ namespace Avalonia.Veldrid
 {
     public struct RaycastResult
     {
-        public static RaycastResult Miss = new RaycastResult()
+        public static RaycastResult Miss = new RaycastResult
         {
-            WindowImpl = null, WindowPoint = new Point(0, 0), ClipSpaceDepth = float.MaxValue, Distance = float.MaxValue, WorldSpaceHitPoint = Vector3.Zero
+            WindowImpl = null, WindowPoint = new Point(0, 0), ClipSpaceDepth = float.MaxValue,
+            Distance = float.MaxValue, WorldSpaceHitPoint = Vector3.Zero
         };
+
         public VeldridTopLevelImpl WindowImpl;
         public Point WindowPoint;
         public float ClipSpaceDepth;

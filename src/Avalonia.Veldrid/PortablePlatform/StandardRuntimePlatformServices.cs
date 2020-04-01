@@ -4,7 +4,7 @@ using Avalonia.Platform.Interop;
 
 namespace Avalonia.Veldrid
 {
-    static class StandardRuntimePlatformServices
+    internal static class StandardRuntimePlatformServices
     {
         public static void Register(Assembly assembly = null)
         {

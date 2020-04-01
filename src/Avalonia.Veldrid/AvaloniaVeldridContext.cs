@@ -5,7 +5,6 @@ using System.Numerics;
 using Avalonia.Input;
 using Avalonia.Platform;
 using Veldrid;
-using PixelFormat = Avalonia.Platform.PixelFormat;
 
 namespace Avalonia.Veldrid
 {
@@ -13,22 +12,19 @@ namespace Avalonia.Veldrid
     {
         private readonly object _windowsCollectionLock = new object();
         private readonly HashSet<VeldridTopLevelImpl> _windows = new HashSet<VeldridTopLevelImpl>();
-        private GraphicsDevice _graphicsDevice;
-        private OutputDescription? _outputDescription;
         private readonly Func<GraphicsDevice, Sampler> _samplerFactory;
+        private OutputDescription? _outputDescription;
         private Shader[] _shaders;
-        private ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
-        private PointerAdapter _pointerAdapter;
-        private KeyboardAdapter _keyboardAdapter;
+        private readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
         private WindowsCollectionView _windowsView;
-        private InputModifiersContainer _modifiers;
-        private int _touchCounter = 0;
+        private readonly InputModifiersContainer _modifiers;
+        private int _touchCounter;
 
         public AvaloniaVeldridContext(GraphicsDevice graphicsDevice = null, OutputDescription? outputDescription = null,
             IScreenImpl screenImpl = null, IMouseDevice mouseDevice = null, IKeyboardDevice keyboardDevice = null,
-            Func<GraphicsDevice,Sampler> samplerFactory = null)
+            Func<GraphicsDevice, Sampler> samplerFactory = null)
         {
-            _graphicsDevice = graphicsDevice;
+            GraphicsDevice = graphicsDevice;
             _outputDescription = outputDescription;
             _samplerFactory = samplerFactory ?? DefaultSamplerFactory;
             Screen = screenImpl ?? new VeldridScreenStub();
@@ -36,99 +32,24 @@ namespace Avalonia.Veldrid
             KeyboardDevice = keyboardDevice ?? new KeyboardDevice();
             TouchDevice = new TouchDevice();
             _modifiers = new InputModifiersContainer();
-            _pointerAdapter = new PointerAdapter(this, _modifiers);
-            _keyboardAdapter = new KeyboardAdapter(this, _modifiers);
-            if (_graphicsDevice != null)
-            {
-                OnDeviceCreated();
-            }
-        }
-
-        private Sampler DefaultSamplerFactory(GraphicsDevice graphicsDevice)
-        {
-            return graphicsDevice.Aniso4xSampler;
-            //return graphicsDevice.PointSampler;
+            PointerAdapter = new PointerAdapter(this, _modifiers);
+            KeyboardAdapter = new KeyboardAdapter(this, _modifiers);
+            if (GraphicsDevice != null) OnDeviceCreated();
         }
 
         /// <summary>
-        /// GraphicsDevice been created and available.
+        ///     GraphicsDevice been created and available.
         /// </summary>
         public event Action<GraphicsDevice> DeviceCreated;
 
         /// <summary>
-        /// GraphicsDevice been destroyed.
+        ///     GraphicsDevice been destroyed.
         /// </summary>
         public event Action DeviceDestroyed;
 
         public IScreenImpl Screen { get; set; }
 
-        public GraphicsDevice GraphicsDevice
-        {
-            get { return _graphicsDevice; }
-        }
-
-        public void SetGraphicsDevice(GraphicsDevice graphicsDevice, OutputDescription? outputDescription = null)
-        {
-            if (_graphicsDevice != graphicsDevice)
-            {
-                if (_graphicsDevice != null)
-                {
-                    OnDeviceDestroyed();
-                    _outputDescription = null;
-                }
-                _graphicsDevice = graphicsDevice;
-                if (_graphicsDevice != null)
-                {
-                    _outputDescription = outputDescription ?? graphicsDevice.MainSwapchain.Framebuffer.OutputDescription;
-                    OnDeviceCreated();
-                }
-            }
-        }
-
-        private void OnDeviceCreated()
-        {
-            var factory = GraphicsDevice.ResourceFactory;
-            var thisClass = GetType();
-            _shaders = ShaderHelper.LoadShader(GraphicsDevice, factory, thisClass.Assembly,
-                thisClass.Namespace + ".Shaders");
-            SpecializationConstant[] specConstants =
-            {
-                //new SpecializationConstant(0, gd.BackendType == GraphicsBackend.OpenGL || gd.BackendType == GraphicsBackend.OpenGLES)
-            };
-            TextureResourceLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
-                new ResourceLayoutElementDescription("WindowUniforms", ResourceKind.UniformBuffer, ShaderStages.Vertex),
-                new ResourceLayoutElementDescription("Input", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
-                new ResourceLayoutElementDescription("InputSampler", ResourceKind.Sampler, ShaderStages.Fragment)));
-            Pipeline = factory.CreateGraphicsPipeline(
-                new GraphicsPipelineDescription(
-                    BlendStateDescription.SingleOverrideBlend,
-                    DepthStencilStateDescription.DepthOnlyLessEqual,
-                    RasterizerStateDescription.CullNone,
-                    PrimitiveTopology.TriangleStrip,
-                    new ShaderSetDescription(new VertexLayoutDescription[] { }, _shaders, specConstants),
-                    new[] { TextureResourceLayout },
-                    _outputDescription ?? GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription
-                ));
-
-            Sampler = _samplerFactory(GraphicsDevice);
-
-            DeviceCreated?.Invoke(_graphicsDevice);
-        }
-
-        private void OnDeviceDestroyed()
-        {
-            TextureResourceLayout?.Dispose();
-            TextureResourceLayout = null;
-            Pipeline?.Dispose();
-            Pipeline = null;
-            if (_shaders!=null)
-                foreach (var shader in _shaders)
-                {
-                    shader.Dispose();
-                }
-            _shaders = null;
-            DeviceDestroyed?.Invoke();
-        }
+        public GraphicsDevice GraphicsDevice { get; private set; }
 
         public Matrix4x4 Projection { get; set; } =
             Matrix4x4.CreatePerspectiveFieldOfView((float) Math.PI * 0.5f, 1, 0.01f, 100.0f);
@@ -143,21 +64,38 @@ namespace Avalonia.Veldrid
 
         public IKeyboardDevice KeyboardDevice { get; }
 
-        public FramebufferSize ScreenSize
-        {
-            get
-            {
-                return  new FramebufferSize((uint) Screen.AllScreens[0].WorkingArea.Width,
-                    (uint) Screen.AllScreens[0].WorkingArea.Height);
-            }
-        }
+        public FramebufferSize ScreenSize =>
+            new FramebufferSize((uint) Screen.AllScreens[0].WorkingArea.Width,
+                (uint) Screen.AllScreens[0].WorkingArea.Height);
 
         public float TexelSize { get; set; } = 0.01f;
         public Sampler Sampler { get; private set; }
-        public KeyboardAdapter KeyboardAdapter => _keyboardAdapter;
-        public PointerAdapter PointerAdapter => _pointerAdapter;
+        public KeyboardAdapter KeyboardAdapter { get; }
+
+        public PointerAdapter PointerAdapter { get; }
+
         public bool AllowNPow2Textures { get; set; } = false;
         public uint MipLevels { get; set; } = 4;
+
+        public void SetGraphicsDevice(GraphicsDevice graphicsDevice, OutputDescription? outputDescription = null)
+        {
+            if (GraphicsDevice != graphicsDevice)
+            {
+                if (GraphicsDevice != null)
+                {
+                    OnDeviceDestroyed();
+                    _outputDescription = null;
+                }
+
+                GraphicsDevice = graphicsDevice;
+                if (GraphicsDevice != null)
+                {
+                    _outputDescription =
+                        outputDescription ?? graphicsDevice.MainSwapchain.Framebuffer.OutputDescription;
+                    OnDeviceCreated();
+                }
+            }
+        }
 
         public RaycastResult? Raycast(ClipSpaceRay ray)
         {
@@ -168,19 +106,15 @@ namespace Avalonia.Veldrid
                 {
                     var res = window.Raycast(ray);
                     if (res.HasValue)
-                    {
                         if (!bestMatch.HasValue || res.Value.Distance < bestMatch.Value.Distance)
-                        {
                             bestMatch = res.Value;
-                        }
-                    }
                 }
             }
 
             return bestMatch;
         }
 
-  
+
         public RaycastResult? Project(Vector3 worldPosition)
         {
             RaycastResult? bestMatch = null;
@@ -190,16 +124,27 @@ namespace Avalonia.Veldrid
                 {
                     var res = window.Project(worldPosition);
                     if (res.HasValue)
-                    {
                         if (!bestMatch.HasValue || res.Value.Distance < bestMatch.Value.Distance)
-                        {
                             bestMatch = res.Value;
-                        }
-                    }
                 }
             }
 
             return bestMatch;
+        }
+
+        public void EnsureInvokeOnMainThread(Action action)
+        {
+            _mainThreadActions.Enqueue(action);
+        }
+
+        public void ProcessMainThreadQueue()
+        {
+            while (_mainThreadActions.TryDequeue(out var action)) action();
+        }
+
+        public TouchAdapter CreateTouchAdapter()
+        {
+            return new TouchAdapter(this, ++_touchCounter, _modifiers);
         }
 
         public virtual void Dispose()
@@ -235,22 +180,53 @@ namespace Avalonia.Veldrid
             }
         }
 
-        public void EnsureInvokeOnMainThread(Action action)
+        private Sampler DefaultSamplerFactory(GraphicsDevice graphicsDevice)
         {
-            _mainThreadActions.Enqueue(action);
+            return graphicsDevice.Aniso4xSampler;
+            //return graphicsDevice.PointSampler;
         }
 
-        public void ProcessMainThreadQueue()
+        private void OnDeviceCreated()
         {
-            while (_mainThreadActions.TryDequeue(out Action action))
+            var factory = GraphicsDevice.ResourceFactory;
+            var thisClass = GetType();
+            _shaders = ShaderHelper.LoadShader(GraphicsDevice, factory, thisClass.Assembly,
+                thisClass.Namespace + ".Shaders");
+            SpecializationConstant[] specConstants =
             {
-                action();
-            }
+                //new SpecializationConstant(0, gd.BackendType == GraphicsBackend.OpenGL || gd.BackendType == GraphicsBackend.OpenGLES)
+            };
+            TextureResourceLayout = factory.CreateResourceLayout(new ResourceLayoutDescription(
+                new ResourceLayoutElementDescription("WindowUniforms", ResourceKind.UniformBuffer, ShaderStages.Vertex),
+                new ResourceLayoutElementDescription("Input", ResourceKind.TextureReadOnly, ShaderStages.Fragment),
+                new ResourceLayoutElementDescription("InputSampler", ResourceKind.Sampler, ShaderStages.Fragment)));
+            Pipeline = factory.CreateGraphicsPipeline(
+                new GraphicsPipelineDescription(
+                    BlendStateDescription.SingleOverrideBlend,
+                    DepthStencilStateDescription.DepthOnlyLessEqual,
+                    RasterizerStateDescription.CullNone,
+                    PrimitiveTopology.TriangleStrip,
+                    new ShaderSetDescription(new VertexLayoutDescription[] { }, _shaders, specConstants),
+                    new[] {TextureResourceLayout},
+                    _outputDescription ?? GraphicsDevice.MainSwapchain.Framebuffer.OutputDescription
+                ));
+
+            Sampler = _samplerFactory(GraphicsDevice);
+
+            DeviceCreated?.Invoke(GraphicsDevice);
         }
 
-        public TouchAdapter CreateTouchAdapter()
+        private void OnDeviceDestroyed()
         {
-            return new TouchAdapter(this, ++_touchCounter, _modifiers);
+            TextureResourceLayout?.Dispose();
+            TextureResourceLayout = null;
+            Pipeline?.Dispose();
+            Pipeline = null;
+            if (_shaders != null)
+                foreach (var shader in _shaders)
+                    shader.Dispose();
+            _shaders = null;
+            DeviceDestroyed?.Invoke();
         }
     }
 }

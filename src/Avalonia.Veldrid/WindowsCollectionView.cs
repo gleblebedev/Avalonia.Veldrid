@@ -18,6 +18,7 @@ namespace Avalonia.Veldrid
                 _list.Clear();
                 return;
             }
+
             context.UpdateView(_list);
         }
 

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Avalonia.Controls.Platform.Surfaces;
@@ -25,14 +24,14 @@ namespace Avalonia.Veldrid
 
         private Texture _texture;
         private ResourceSet _resrouceSet;
-        private bool _isVisible = false;
+        private bool _isVisible;
         private PixelPoint _position;
         private bool _isFullscreen;
         private Size _clientSizeCache;
         private FramebufferSize _framebufferSize;
         private WindowUniforms _uniforms;
-        private bool _updateTexture;
         private float? _texelSize;
+        private Rect _invalidRegion = Rect.Empty;
         private double _dpi = 96.0;
 
         public VeldridTopLevelImpl(AvaloniaVeldridContext veldridContext)
@@ -42,37 +41,8 @@ namespace Avalonia.Veldrid
             VeldridContext.DeviceCreated += OnDeviceCreated;
             VeldridContext.DeviceDestroyed += OnDeviceDestroyed;
 
-            if (veldridContext.GraphicsDevice != null)
-            {
-                OnDeviceCreated(veldridContext.GraphicsDevice);
-            }
+            if (veldridContext.GraphicsDevice != null) OnDeviceCreated(veldridContext.GraphicsDevice);
             veldridContext.AddWindow(this);
-        }
-
-        private void OnDeviceDestroyed()
-        {
-            _framebufferSource?.Dispose();
-            _uniformBuffer?.Dispose();
-            _framebufferSource = null;
-            _uniformBuffer = null;
-        }
-
-        private void OnDeviceCreated(GraphicsDevice obj)
-        {
-            _framebufferSource = new TextureFramebufferSource(
-                VeldridContext.GraphicsDevice,
-                _framebufferSize,
-                PixelFormat.Rgba8888,
-                VeldridContext.MipLevels,
-                VeldridContext.AllowNPow2Textures,
-                Dpi);
-            _clientSizeCache = ClientSize;
-            var sizeInBytes = (uint)Marshal.SizeOf<WindowUniforms>();
-            sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
-            _uniformBuffer = GraphicsDevice.ResourceFactory.CreateBuffer(
-                new BufferDescription(sizeInBytes,
-                    BufferUsage.UniformBuffer | BufferUsage.Dynamic));
-            _updateTexture = true;
         }
 
 
@@ -89,30 +59,29 @@ namespace Avalonia.Veldrid
             }
         }
 
+        public virtual IScreenImpl Screen => new VeldridScreenStub(Dpi, FramebufferSize);
+
+
+        public virtual FramebufferSize FramebufferSize => IsFullscreen ? VeldridContext.ScreenSize : _framebufferSize;
+
+        public virtual IInputDevice TouchDevice => VeldridContext.TouchDevice;
+
         public double Dpi
         {
-            get { return _dpi; }
+            get => _dpi;
             set
             {
                 if (_dpi != value)
                 {
                     var clientSize = ClientSize;
                     _dpi = value;
-                    if (_framebufferSource != null)
-                    {
-                        _framebufferSource.Dpi = value;
-                    }
+                    if (_framebufferSource != null) _framebufferSource.Dpi = value;
                     Resize(clientSize);
                     ScalingChanged?.Invoke(Scaling);
                     //Invalidate(new Rect(new Point(0,0), ClientSize));
                 }
             }
         }
-
-        public virtual IScreenImpl Screen => new VeldridScreenStub(Dpi, FramebufferSize);
-
-
-        public virtual FramebufferSize FramebufferSize => IsFullscreen ? VeldridContext.ScreenSize : _framebufferSize;
 
         public AvaloniaVeldridContext VeldridContext { get; }
 
@@ -160,14 +129,11 @@ namespace Avalonia.Veldrid
         /// </summary>
         public virtual double Scaling
         {
-            get => _dpi/96.0;
+            get => _dpi / 96.0;
             set
             {
                 var scaling = Scaling;
-                if (scaling != value)
-                {
-                    Dpi = 96.0 * value;
-                }
+                if (scaling != value) Dpi = 96.0 * value;
             }
         }
 
@@ -188,8 +154,6 @@ namespace Avalonia.Veldrid
 
         /// <summary>Gets a mouse device associated with toplevel</summary>
         public virtual IMouseDevice MouseDevice => VeldridContext.MouseDevice;
-
-        public virtual IInputDevice TouchDevice => VeldridContext.TouchDevice;
 
         /// <summary>
         ///     Gets or sets a method called when the toplevel receives input.
@@ -229,7 +193,8 @@ namespace Avalonia.Veldrid
         public virtual void Resize(Size clientSize)
         {
             var scaling = Scaling;
-            _framebufferSize = new FramebufferSize((uint) (clientSize.Width * scaling), (uint) (clientSize.Height * scaling));
+            _framebufferSize =
+                new FramebufferSize((uint) (clientSize.Width * scaling), (uint) (clientSize.Height * scaling));
             FireResizedIfNecessary();
         }
 
@@ -238,7 +203,7 @@ namespace Avalonia.Veldrid
             if (_framebufferSource == null)
                 return;
 
-            if (_framebufferSource.Size == new FramebufferSize(0,0))
+            if (_framebufferSource.Size == new FramebufferSize(0, 0))
                 return;
 
             if (!_isVisible)
@@ -246,10 +211,12 @@ namespace Avalonia.Veldrid
 
             if (IsFullscreen) FireResizedIfNecessary();
 
-            if (_updateTexture)
+            var updateTexture = _invalidRegion != Rect.Empty;
+            if (updateTexture)
             {
-                var clientSize = ClientSize;
-                Paint?.Invoke(new Rect(0, 0, clientSize.Width, clientSize.Height));
+                Paint?.Invoke(_invalidRegion.Intersect(new Rect(new Point(0,0), ClientSize)));
+                _invalidRegion = Rect.Empty;
+
             }
 
             if (_texture == null)
@@ -264,13 +231,12 @@ namespace Avalonia.Veldrid
                 _uniforms.Model = GetActiveModel();
                 _uniforms.Viewport = _framebufferSource.ViewportSize;
                 commandList.UpdateBuffer(_uniformBuffer, 0, ref _uniforms);
-                if (_updateTexture)
+                if (updateTexture)
                 {
                     var stagingTexture = _framebufferSource.GetStagingTexture();
                     commandList.CopyTexture(stagingTexture, _texture, 0, 0);
                     if (stagingTexture.MipLevels > 1)
                         commandList.GenerateMipmaps(_texture);
-                    _updateTexture = false;
                 }
 
                 commandList.SetPipeline(VeldridContext.Pipeline);
@@ -316,7 +282,8 @@ namespace Avalonia.Veldrid
             return new RaycastResult
             {
                 WindowImpl = this,
-                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (-pos.Y + 1.0) * 0.5),
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5,
+                    clientSize.Height * (-pos.Y + 1.0) * 0.5),
                 ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
                 WorldSpaceHitPoint = worldSpaceHit,
                 Distance = distance
@@ -336,7 +303,7 @@ namespace Avalonia.Veldrid
 
             var k = -from.Z / (to.Z - from.Z);
             if (float.IsNaN(k)) k = 0;
-            var pos =  Vector3.Lerp(from, to, k);
+            var pos = Vector3.Lerp(from, to, k);
             if (pos.X < -1 ||
                 pos.X > 1 ||
                 pos.Y < -1 ||
@@ -353,7 +320,8 @@ namespace Avalonia.Veldrid
             return new RaycastResult
             {
                 WindowImpl = this,
-                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5, clientSize.Height * (-pos.Y + 1.0) * 0.5),
+                WindowPoint = new Point(clientSize.Width * (pos.X + 1.0) * 0.5,
+                    clientSize.Height * (-pos.Y + 1.0) * 0.5),
                 ClipSpaceDepth = clipSpacePoint.Z / clipSpacePoint.W,
                 WorldSpaceHitPoint = worldSpaceHit,
                 Distance = (worldSpaceHit - worldSpaceFrom).Length()
@@ -411,7 +379,7 @@ namespace Avalonia.Veldrid
         /// <summary>Invalidates a rect on the toplevel.</summary>
         public virtual void Invalidate(Rect rect)
         {
-            _updateTexture = true;
+            _invalidRegion = _invalidRegion.Union(rect);
         }
 
         /// <summary>
@@ -448,15 +416,38 @@ namespace Avalonia.Veldrid
         {
         }
 
+        private void OnDeviceDestroyed()
+        {
+            _framebufferSource?.Dispose();
+            _uniformBuffer?.Dispose();
+            _framebufferSource = null;
+            _uniformBuffer = null;
+        }
+
+        private void OnDeviceCreated(GraphicsDevice obj)
+        {
+            _framebufferSource = new TextureFramebufferSource(
+                VeldridContext.GraphicsDevice,
+                _framebufferSize,
+                PixelFormat.Rgba8888,
+                VeldridContext.MipLevels,
+                VeldridContext.AllowNPow2Textures,
+                Dpi);
+            _clientSizeCache = ClientSize;
+            var sizeInBytes = (uint) Marshal.SizeOf<WindowUniforms>();
+            sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
+            _uniformBuffer = GraphicsDevice.ResourceFactory.CreateBuffer(
+                new BufferDescription(sizeInBytes,
+                    BufferUsage.UniformBuffer | BufferUsage.Dynamic));
+            _invalidRegion = new Rect(0,0,double.MaxValue, double.MaxValue);
+        }
+
         private void FireResizedIfNecessary()
         {
             if (_framebufferSource != null)
             {
                 var framebufferSize = FramebufferSize;
-                if (framebufferSize != _framebufferSource.Size)
-                {
-                    _framebufferSource.Size = framebufferSize;
-                }
+                if (framebufferSize != _framebufferSource.Size) _framebufferSource.Size = framebufferSize;
             }
 
             var size = ClientSize;
@@ -478,9 +469,10 @@ namespace Avalonia.Veldrid
                 return _fullScreenModel;
 
             var clientSize = ClientSize;
-            var texelSize = TexelSize*0.5f;
-            var scale = Matrix4x4.CreateScale((float)clientSize.Width * texelSize, (float)clientSize.Height * texelSize, 1.0f);
-            return scale*WorldTransform;
+            var texelSize = TexelSize * 0.5f;
+            var scale = Matrix4x4.CreateScale((float) clientSize.Width * texelSize,
+                (float) clientSize.Height * texelSize, 1.0f);
+            return scale * WorldTransform;
         }
 
         private Matrix4x4 GetActiveProjection()

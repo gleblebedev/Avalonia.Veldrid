@@ -1,9 +1,5 @@
 ﻿using System.Numerics;
-using System.Reflection;
-using System.Runtime.InteropServices;
 using Avalonia.Controls;
-using Avalonia.Platform;
-using Avalonia.Platform.Interop;
 
 namespace Avalonia.Veldrid
 {
@@ -21,6 +17,7 @@ namespace Avalonia.Veldrid
 
             return false;
         }
+
         public static bool TryGetWorldTransform(Window window, out Matrix4x4 transform)
         {
             if (window?.PlatformImpl is VeldridTopLevelImpl impl)
@@ -28,9 +25,11 @@ namespace Avalonia.Veldrid
                 transform = impl.WorldTransform;
                 return true;
             }
+
             transform = Matrix4x4.Identity;
             return false;
         }
+
         public static bool TrySetDpi(Window window, float dpi)
         {
             if (window?.PlatformImpl is VeldridTopLevelImpl impl)
@@ -41,6 +40,7 @@ namespace Avalonia.Veldrid
 
             return false;
         }
+
         public static bool TrySetTexelSize(Window window, float size)
         {
             if (window?.PlatformImpl is VeldridTopLevelImpl impl)
@@ -51,6 +51,7 @@ namespace Avalonia.Veldrid
 
             return false;
         }
+
         public static bool TryGetTexelSize(Window window, out float size)
         {
             if (window?.PlatformImpl is VeldridTopLevelImpl impl)
@@ -58,9 +59,9 @@ namespace Avalonia.Veldrid
                 size = impl.TexelSize;
                 return true;
             }
+
             size = 1.0f;
             return false;
         }
-        
     }
 }

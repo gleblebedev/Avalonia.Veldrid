@@ -6,7 +6,7 @@ namespace Avalonia.Veldrid
     {
         protected static ulong GetTimestamp()
         {
-            return (ulong)DateTimeOffset.UtcNow.Ticks;
+            return (ulong) DateTimeOffset.UtcNow.Ticks;
         }
     }
 }

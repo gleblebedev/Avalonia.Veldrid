@@ -20,7 +20,7 @@ namespace Avalonia.Veldrid
         {
             var x = (float) ((point.X / clientAreaSize.Width - 0.5) * 2.0);
             float y;
-            y = (float)((-point.Y / clientAreaSize.Height + 0.5) * 2.0);
+            y = (float) ((-point.Y / clientAreaSize.Height + 0.5) * 2.0);
             if (IsClipSpaceYInverted)
                 y = -y;
             From = new Vector4(x, y, isDepthRangeZeroToOne ? 0 : -1, 1);

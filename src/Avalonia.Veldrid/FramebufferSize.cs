@@ -38,11 +38,13 @@ namespace Avalonia.Veldrid
             Width = width;
             Height = height;
         }
+
         public FramebufferSize(int width, int height)
         {
-            Width = (uint)width;
-            Height = (uint)height;
+            Width = (uint) width;
+            Height = (uint) height;
         }
+
         public uint Width { get; }
         public uint Height { get; }
 

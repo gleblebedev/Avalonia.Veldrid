@@ -12,21 +12,22 @@ using Avalonia.Utilities;
 namespace Avalonia.Veldrid
 {
     /// <summary>
-    /// Loads assets compiled into the application binary.
+    ///     Loads assets compiled into the application binary.
     /// </summary>
     public class AssetLoader : IAssetLoader
     {
         private const string AvaloniaResourceName = "!AvaloniaResources";
+
         private static readonly Dictionary<string, AssemblyDescriptor> AssemblyNameCache
             = new Dictionary<string, AssemblyDescriptor>();
 
         private AssemblyDescriptor _defaultResmAssembly;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="AssetLoader"/> class.
+        ///     Initializes a new instance of the <see cref="AssetLoader" /> class.
         /// </summary>
         /// <param name="assembly">
-        /// The default assembly from which to load resm: assets for which no assembly is specified.
+        ///     The default assembly from which to load resm: assets for which no assembly is specified.
         /// </param>
         public AssetLoader(Assembly assembly = null)
         {
@@ -36,8 +37,25 @@ namespace Avalonia.Veldrid
                 _defaultResmAssembly = new AssemblyDescriptor(assembly);
         }
 
+        private interface IAssetDescriptor
+        {
+            Assembly Assembly { get; }
+            Stream GetStream();
+        }
+
+        public static void RegisterResUriParsers()
+        {
+            if (!UriParser.IsKnownScheme("avares"))
+                UriParser.Register(new GenericUriParser(
+                    GenericUriParserOptions.GenericAuthority |
+                    GenericUriParserOptions.NoUserInfo |
+                    GenericUriParserOptions.NoPort |
+                    GenericUriParserOptions.NoQuery |
+                    GenericUriParserOptions.NoFragment), "avares", -1);
+        }
+
         /// <summary>
-        /// Sets the default assembly from which to load assets for which no assembly is specified.
+        ///     Sets the default assembly from which to load assets for which no assembly is specified.
         /// </summary>
         /// <param name="assembly">The default assembly.</param>
         public void SetDefaultAssembly(Assembly assembly)
@@ -46,11 +64,11 @@ namespace Avalonia.Veldrid
         }
 
         /// <summary>
-        /// Checks if an asset with the specified URI exists.
+        ///     Checks if an asset with the specified URI exists.
         /// </summary>
         /// <param name="uri">The URI.</param>
         /// <param name="baseUri">
-        /// A base URI to use if <paramref name="uri"/> is relative.
+        ///     A base URI to use if <paramref name="uri" /> is relative.
         /// </param>
         /// <returns>True if the asset could be found; otherwise false.</returns>
         public bool Exists(Uri uri, Uri baseUri = null)
@@ -59,40 +77,40 @@ namespace Avalonia.Veldrid
         }
 
         /// <summary>
-        /// Opens the asset with the requested URI.
+        ///     Opens the asset with the requested URI.
         /// </summary>
         /// <param name="uri">The URI.</param>
         /// <param name="baseUri">
-        /// A base URI to use if <paramref name="uri"/> is relative.
+        ///     A base URI to use if <paramref name="uri" /> is relative.
         /// </param>
         /// <returns>A stream containing the asset contents.</returns>
         /// <exception cref="FileNotFoundException">
-        /// The asset could not be found.
+        ///     The asset could not be found.
         /// </exception>
-        public Stream Open(Uri uri, Uri baseUri = null) => OpenAndGetAssembly(uri, baseUri).Item1;
+        public Stream Open(Uri uri, Uri baseUri = null)
+        {
+            return OpenAndGetAssembly(uri, baseUri).Item1;
+        }
 
         /// <summary>
-        /// Opens the asset with the requested URI and returns the asset stream and the
-        /// assembly containing the asset.
+        ///     Opens the asset with the requested URI and returns the asset stream and the
+        ///     assembly containing the asset.
         /// </summary>
         /// <param name="uri">The URI.</param>
         /// <param name="baseUri">
-        /// A base URI to use if <paramref name="uri"/> is relative.
+        ///     A base URI to use if <paramref name="uri" /> is relative.
         /// </param>
         /// <returns>
-        /// The stream containing the resource contents together with the assembly.
+        ///     The stream containing the resource contents together with the assembly.
         /// </returns>
         /// <exception cref="FileNotFoundException">
-        /// The asset could not be found.
+        ///     The asset could not be found.
         /// </exception>
         public (Stream stream, Assembly assembly) OpenAndGetAssembly(Uri uri, Uri baseUri = null)
         {
             var asset = GetAsset(uri, baseUri);
 
-            if (asset == null)
-            {
-                throw new FileNotFoundException($"The resource {uri} could not be found.");
-            }
+            if (asset == null) throw new FileNotFoundException($"The resource {uri} could not be found.");
 
             return (asset.GetStream(), asset.Assembly);
         }
@@ -105,10 +123,10 @@ namespace Avalonia.Veldrid
         }
 
         /// <summary>
-        /// Gets all assets of a folder and subfolders that match specified uri.
+        ///     Gets all assets of a folder and subfolders that match specified uri.
         /// </summary>
         /// <param name="uri">The URI.</param>
-        /// <param name="baseUri">Base URI that is used if <paramref name="uri"/> is relative.</param>
+        /// <param name="baseUri">Base URI that is used if <paramref name="uri" /> is relative.</param>
         /// <returns>All matching assets as a tuple of the absolute path to the asset and the assembly containing the asset</returns>
         public IEnumerable<Uri> GetAssets(Uri uri, Uri baseUri)
         {
@@ -126,11 +144,9 @@ namespace Avalonia.Veldrid
             {
                 var (asm, path) = GetResAsmAndPath(uri);
                 if (asm == null)
-                {
                     throw new ArgumentException(
                         "No default assembly, entry assembly or explicit assembly specified; " +
                         "don't know where to look up for the resource, try specifying assembly explicitly.");
-                }
 
                 if (asm?.AvaloniaResources == null)
                     return Enumerable.Empty<Uri>();
@@ -163,11 +179,9 @@ namespace Avalonia.Veldrid
                 var asm = GetAssembly(uri) ?? GetAssembly(baseUri) ?? _defaultResmAssembly;
 
                 if (asm == null)
-                {
                     throw new ArgumentException(
                         "No default assembly, entry assembly or explicit assembly specified; " +
                         "don't know where to look up for the resource, try specifying assembly explicitly.");
-                }
 
                 IAssetDescriptor rv;
 
@@ -187,7 +201,7 @@ namespace Avalonia.Veldrid
                 return desc;
             }
 
-            throw new ArgumentException($"Unsupported url type: " + uri.Scheme, nameof(uri));
+            throw new ArgumentException("Unsupported url type: " + uri.Scheme, nameof(uri));
         }
 
         private (AssemblyDescriptor asm, string path) GetResAsmAndPath(Uri uri)
@@ -210,10 +224,7 @@ namespace Avalonia.Veldrid
                     var qs = ParseQueryString(uri);
                     string assemblyName;
 
-                    if (qs.TryGetValue("assembly", out assemblyName))
-                    {
-                        return GetAssembly(assemblyName);
-                    }
+                    if (qs.TryGetValue("assembly", out assemblyName)) return GetAssembly(assemblyName);
                 }
             }
 
@@ -254,41 +265,33 @@ namespace Avalonia.Veldrid
         private Dictionary<string, string> ParseQueryString(Uri uri)
         {
             return uri.Query.TrimStart('?')
-                .Split(new[] { '&' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(new[] {'&'}, StringSplitOptions.RemoveEmptyEntries)
                 .Select(p => p.Split('='))
                 .ToDictionary(p => p[0], p => p[1]);
         }
 
-        private interface IAssetDescriptor
-        {
-            Stream GetStream();
-            Assembly Assembly { get; }
-        }
-
         private class AssemblyResourceDescriptor : IAssetDescriptor
         {
-            private readonly Assembly _asm;
             private readonly string _name;
 
             public AssemblyResourceDescriptor(Assembly asm, string name)
             {
-                _asm = asm;
+                Assembly = asm;
                 _name = name;
             }
 
+            public Assembly Assembly { get; }
+
             public Stream GetStream()
             {
-                return _asm.GetManifestResourceStream(_name);
+                return Assembly.GetManifestResourceStream(_name);
             }
-
-            public Assembly Assembly => _asm;
         }
 
         private class AvaloniaResourceDescriptor : IAssetDescriptor
         {
             private readonly int _offset;
             private readonly int _length;
-            public Assembly Assembly { get; }
 
             public AvaloniaResourceDescriptor(Assembly asm, int offset, int length)
             {
@@ -297,13 +300,15 @@ namespace Avalonia.Veldrid
                 Assembly = asm;
             }
 
+            public Assembly Assembly { get; }
+
             public Stream GetStream()
             {
                 return new SlicedStream(Assembly.GetManifestResourceStream(AvaloniaResourceName), _offset, _length);
             }
         }
 
-        class SlicedStream : Stream
+        private class SlicedStream : Stream
         {
             private readonly Stream _baseStream;
             private readonly int _from;
@@ -315,13 +320,25 @@ namespace Avalonia.Veldrid
                 _from = from;
                 _baseStream.Position = from;
             }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => _baseStream.CanRead;
+            public override bool CanWrite => false;
+            public override long Length { get; }
+
+            public override long Position
+            {
+                get => _baseStream.Position - _from;
+                set => _baseStream.Position = value + _from;
+            }
+
             public override void Flush()
             {
             }
 
             public override int Read(byte[] buffer, int offset, int count)
             {
-                return _baseStream.Read(buffer, offset, (int)Math.Min(count, Length - Position));
+                return _baseStream.Read(buffer, offset, (int) Math.Min(count, Length - Position));
             }
 
             public override long Seek(long offset, SeekOrigin origin)
@@ -335,18 +352,19 @@ namespace Avalonia.Veldrid
                 return Position;
             }
 
-            public override void SetLength(long value) => throw new NotSupportedException();
-
-            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-            public override bool CanRead => true;
-            public override bool CanSeek => _baseStream.CanRead;
-            public override bool CanWrite => false;
-            public override long Length { get; }
-            public override long Position
+            public override void SetLength(long value)
             {
-                get => _baseStream.Position - _from;
-                set => _baseStream.Position = value + _from;
+                throw new NotSupportedException();
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new NotSupportedException();
+            }
+
+            public override void Close()
+            {
+                _baseStream.Close();
             }
 
             protected override void Dispose(bool disposing)
@@ -354,8 +372,6 @@ namespace Avalonia.Veldrid
                 if (disposing)
                     _baseStream.Dispose();
             }
-
-            public override void Close() => _baseStream.Close();
         }
 
         private class AssemblyDescriptor
@@ -367,7 +383,7 @@ namespace Avalonia.Veldrid
                 if (assembly != null)
                 {
                     Resources = assembly.GetManifestResourceNames()
-                        .ToDictionary(n => n, n => (IAssetDescriptor)new AssemblyResourceDescriptor(assembly, n));
+                        .ToDictionary(n => n, n => (IAssetDescriptor) new AssemblyResourceDescriptor(assembly, n));
                     Name = assembly.GetName().Name;
                     using (var resources = assembly.GetManifestResourceStream(AvaloniaResourceName))
                     {
@@ -376,9 +392,11 @@ namespace Avalonia.Veldrid
                             Resources.Remove(AvaloniaResourceName);
 
                             var indexLength = new BinaryReader(resources).ReadInt32();
-                            var index = AvaloniaResourcesIndexReaderWriter.Read(new SlicedStream(resources, 4, indexLength));
+                            var index = AvaloniaResourcesIndexReaderWriter.Read(new SlicedStream(resources, 4,
+                                indexLength));
                             var baseOffset = indexLength + 4;
-                            AvaloniaResources = index.ToDictionary(r => "/" + r.Path.TrimStart('/'), r => (IAssetDescriptor)
+                            AvaloniaResources = index.ToDictionary(r => "/" + r.Path.TrimStart('/'), r =>
+                                (IAssetDescriptor)
                                 new AvaloniaResourceDescriptor(assembly, baseOffset + r.Offset, r.Size));
                         }
                     }
@@ -389,17 +407,6 @@ namespace Avalonia.Veldrid
             public Dictionary<string, IAssetDescriptor> Resources { get; }
             public Dictionary<string, IAssetDescriptor> AvaloniaResources { get; }
             public string Name { get; }
-        }
-
-        public static void RegisterResUriParsers()
-        {
-            if (!UriParser.IsKnownScheme("avares"))
-                UriParser.Register(new GenericUriParser(
-                    GenericUriParserOptions.GenericAuthority |
-                    GenericUriParserOptions.NoUserInfo |
-                    GenericUriParserOptions.NoPort |
-                    GenericUriParserOptions.NoQuery |
-                    GenericUriParserOptions.NoFragment), "avares", -1);
         }
     }
 }

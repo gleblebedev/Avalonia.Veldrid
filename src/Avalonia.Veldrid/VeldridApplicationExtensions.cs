@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Avalonia.Controls;
+﻿using Avalonia.Controls;
 
 namespace Avalonia.Veldrid
 {
@@ -18,9 +15,8 @@ namespace Avalonia.Veldrid
             return builder.UseWindowingSubsystem(
                 () => PortableWindowPlatform.Initialize(
                     AvaloniaLocator.Current.GetService<AvaloniaVeldridContext>() ??
-                    new AvaloniaVeldridContext(null)),
+                    new AvaloniaVeldridContext()),
                 "PortableVeldridPlatform");
-            
         }
     }
 }
