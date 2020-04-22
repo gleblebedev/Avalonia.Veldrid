@@ -7,8 +7,8 @@ namespace Avalonia.Veldrid
     public class PointerAdapter : InputAdapterBase
     {
         private readonly AvaloniaVeldridContext _context;
-        private RaycastResult _lastRaycastResult;
         private readonly InputModifiersContainer _inputModifiers;
+        private RaycastResult _lastRaycastResult;
 
         internal PointerAdapter(AvaloniaVeldridContext context, InputModifiersContainer inputModifiers)
         {
@@ -36,9 +36,7 @@ namespace Avalonia.Veldrid
                     break;
             }
 
-            if (_lastRaycastResult.WindowImpl == null) return;
-
-            _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(eventType));
+            RaiseEvent(eventType);
         }
 
         public void OnButtonDown(MouseButton mouseButton)
@@ -61,9 +59,7 @@ namespace Avalonia.Veldrid
                     break;
             }
 
-            if (_lastRaycastResult.WindowImpl == null) return;
-
-            _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(eventType));
+            RaiseEvent(eventType);
         }
 
         public void OnEntered()
@@ -72,9 +68,7 @@ namespace Avalonia.Veldrid
 
         public void OnLeft()
         {
-            if (_lastRaycastResult.WindowImpl == null) return;
-
-            _lastRaycastResult.WindowImpl.Input?.Invoke(CreatePointerEventArgs(RawPointerEventType.LeaveWindow));
+            RaiseEvent(RawPointerEventType.LeaveWindow);
         }
 
         public void OnMove(Vector2 position)
@@ -86,17 +80,21 @@ namespace Avalonia.Veldrid
 
             var raycastResult = res.Value;
             if (raycastResult.WindowImpl != _lastRaycastResult.WindowImpl)
-                if (_lastRaycastResult.WindowImpl != null)
-                    _lastRaycastResult.WindowImpl.Input?.Invoke(
-                        CreatePointerEventArgs(RawPointerEventType.LeaveWindow));
+            {
+                RaiseEvent(RawPointerEventType.LeaveWindow);
+            }
             _lastRaycastResult = raycastResult;
             RaiseEvent(RawPointerEventType.Move);
         }
 
         private void RaiseEvent(RawPointerEventType rawPointerEventType)
         {
-            var windowImpl = _lastRaycastResult.WindowImpl;
-            if (windowImpl != null) windowImpl.Input?.Invoke(CreatePointerEventArgs(rawPointerEventType));
+            var input = _lastRaycastResult.WindowImpl?.Input;
+            if (input != null)
+            {
+                var args = CreatePointerEventArgs(rawPointerEventType);
+                _context.EnsureInvokeOnMainThread(() => input(args));
+            }
         }
 
         private RawPointerEventArgs CreatePointerEventArgs(RawPointerEventType type)

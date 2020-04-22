@@ -1,7 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Numerics;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 using Avalonia.Input;
 using Avalonia.Platform;
 using Veldrid;
@@ -13,17 +16,22 @@ namespace Avalonia.Veldrid
         private readonly object _windowsCollectionLock = new object();
         private readonly HashSet<VeldridTopLevelImpl> _windows = new HashSet<VeldridTopLevelImpl>();
         private readonly Func<GraphicsDevice, Sampler> _samplerFactory;
+        private readonly BufferBlock<Action> _eventPipe = new BufferBlock<Action>();
+        private readonly InputModifiersContainer _modifiers;
         private OutputDescription? _outputDescription;
         private Shader[] _shaders;
-        private readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
         private WindowsCollectionView _windowsView;
-        private readonly InputModifiersContainer _modifiers;
         private int _touchCounter;
+        HashSet<VeldridTopLevelImpl> _windowsToPaint = new HashSet<VeldridTopLevelImpl>();
+        private Task _uiTask;
+        private CancellationTokenSource _contextLifetimeCTS;
+
 
         public AvaloniaVeldridContext(GraphicsDevice graphicsDevice = null, OutputDescription? outputDescription = null,
             IScreenImpl screenImpl = null, IMouseDevice mouseDevice = null, IKeyboardDevice keyboardDevice = null,
             Func<GraphicsDevice, Sampler> samplerFactory = null)
         {
+            _contextLifetimeCTS = new CancellationTokenSource();
             GraphicsDevice = graphicsDevice;
             _outputDescription = outputDescription;
             _samplerFactory = samplerFactory ?? DefaultSamplerFactory;
@@ -35,6 +43,7 @@ namespace Avalonia.Veldrid
             PointerAdapter = new PointerAdapter(this, _modifiers);
             KeyboardAdapter = new KeyboardAdapter(this, _modifiers);
             if (GraphicsDevice != null) OnDeviceCreated();
+            _uiTask = Task.Run(()=>ProcessMainThreadQueue(_contextLifetimeCTS.Token));
         }
 
         /// <summary>
@@ -134,12 +143,53 @@ namespace Avalonia.Veldrid
 
         public void EnsureInvokeOnMainThread(Action action)
         {
-            _mainThreadActions.Enqueue(action);
+            _eventPipe.Post(action);
         }
 
-        public void ProcessMainThreadQueue()
+        private void InvalidateWindow(VeldridTopLevelImpl window)
         {
-            while (_mainThreadActions.TryDequeue(out var action)) action();
+            _windowsToPaint.Add(window);
+        }
+
+        private async Task ProcessMainThreadQueue(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                Action callback;
+
+                //Wait for the first message
+                try
+                {
+                    callback = await _eventPipe.ReceiveAsync(token);
+                }
+                // InvalidOperationException thrown when the pipe is closed.
+                catch (InvalidOperationException)
+                {
+                    return;
+                }
+                catch (TaskCanceledException)
+                {
+                    return;
+                }
+                callback();
+                
+                //Process the rest from the pipe
+                while (_eventPipe.TryReceive(out callback))
+                {
+                    callback();
+                }
+
+                //Update textures
+                if (_windowsToPaint.Count > 0)
+                {
+                    var windowsToPaint = _windowsToPaint.ToList();
+                    _windowsToPaint.Clear();
+                    foreach (var window in windowsToPaint)
+                    {
+                        window.PaintImpl();
+                    }
+                }
+            }
         }
 
         public TouchAdapter CreateTouchAdapter()
@@ -149,6 +199,8 @@ namespace Avalonia.Veldrid
 
         public virtual void Dispose()
         {
+            _contextLifetimeCTS.Cancel();
+            _eventPipe.Complete();
             Pipeline.Dispose();
             TextureResourceLayout.Dispose();
         }
@@ -227,6 +279,16 @@ namespace Avalonia.Veldrid
                     shader.Dispose();
             _shaders = null;
             DeviceDestroyed?.Invoke();
+        }
+
+        public void SchedulePaint(VeldridTopLevelImpl window)
+        {
+            _eventPipe.Post(() => InvalidateWindow(window));
+        }
+
+        public void RunLoop(CancellationToken cancellationToken)
+        {
+            _uiTask.Wait(cancellationToken);
         }
     }
 }

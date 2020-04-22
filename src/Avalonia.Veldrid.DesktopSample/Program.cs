@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Dialogs;
 using Avalonia.Veldrid.Sample;
 using Avalonia.Veldrid.Sdl2;
@@ -84,7 +85,6 @@ namespace Avalonia.Veldrid.DesktopSample
                 _window.PumpEvents();
                 if (_window.Exists)
                 {
-                    _veldridContext.ProcessMainThreadQueue();
                     if (_windowResized)
                     {
                         _windowResized = false;
@@ -98,6 +98,7 @@ namespace Avalonia.Veldrid.DesktopSample
             _keyboard.Dispose();
             _pointer.Dispose();
             _commandList.Dispose();
+            _veldridContext.Dispose();
             _graphicsDevice.Dispose();
 
             return 0;

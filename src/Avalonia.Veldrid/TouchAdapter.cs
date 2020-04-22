@@ -37,8 +37,9 @@ namespace Avalonia.Veldrid
         ///     Move touch as a point in space with a certain tolerance distance.
         /// </summary>
         /// <param name="worldPosition">Position of the touch (tip of a finger) in world space.</param>
-        /// <param name="toleranceInMeters">Distance to window at which touch is registered.</param>
-        public void Move(Vector3 worldPosition, float toleranceInMeters = 0.03f)
+        /// <param name="newTouchToleranceInMeters">Distance to window at which a new touch is registered.</param>
+        /// <param name="folowUpTouchToleranceInMeters">Distance to window at which an existing touch is still registered.</param>
+        public void Move(Vector3 worldPosition, float newTouchToleranceInMeters = 0.03f, float folowUpTouchToleranceInMeters = 0.06f)
         {
             var useRaycast = false;
             RaycastResult? res;
@@ -54,7 +55,13 @@ namespace Avalonia.Veldrid
             else
             {
                 res = _context.Project(worldPosition);
-                if (res.HasValue && res.Value.Distance > toleranceInMeters) res = null;
+                if (res.HasValue)
+                {
+                    var tolerance = (res.Value.WindowImpl == _lastProjectionResult.WindowImpl)
+                        ? folowUpTouchToleranceInMeters
+                        : newTouchToleranceInMeters;
+                    if (res.Value.Distance > tolerance) res = null;
+                }
                 Move(res);
             }
         }
@@ -88,14 +95,21 @@ namespace Avalonia.Veldrid
             else
             {
                 _lastProjectionResult = raycastResult;
-                RaiseEvent(RawPointerEventType.Move);
+                RaiseEvent(RawPointerEventType.TouchUpdate);
             }
         }
 
         private void RaiseEvent(RawPointerEventType rawPointerEventType)
         {
-            var windowImpl = _lastProjectionResult.WindowImpl;
-            if (windowImpl != null) windowImpl.Input?.Invoke(CreateEventArgs(rawPointerEventType));
+            var input = _lastProjectionResult.WindowImpl?.Input;
+            if (input != null)
+            {
+                var args = CreateEventArgs(rawPointerEventType);
+                _context.EnsureInvokeOnMainThread(() =>
+                {
+                    input(args);
+                });
+            }
         }
 
         private RawTouchEventArgs CreateEventArgs(RawPointerEventType type)

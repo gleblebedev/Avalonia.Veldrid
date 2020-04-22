@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Avalonia.Controls.Platform.Surfaces;
 using Avalonia.Input;
 using Avalonia.Input.Raw;
@@ -18,7 +19,7 @@ namespace Avalonia.Veldrid
         private static readonly Matrix4x4 _fullScreenModel = Matrix4x4.CreateTranslation(0, 0, 0.999f);
 
         private readonly ManagedDeferredRendererLock _rendererLock = new ManagedDeferredRendererLock();
-        private readonly object _gate = new object();
+        private readonly object _framebufferLock = new object();
         private TextureFramebufferSource _framebufferSource;
         private DeviceBuffer _uniformBuffer;
 
@@ -31,8 +32,11 @@ namespace Avalonia.Veldrid
         private FramebufferSize _framebufferSize;
         private WindowUniforms _uniforms;
         private float? _texelSize;
+        private object _invalidRegionLock = new object();
         private Rect _invalidRegion = Rect.Empty;
         private double _dpi = 96.0;
+        private bool _hasActualSize;
+        private bool _hasUpdatedImage;
 
         public VeldridTopLevelImpl(AvaloniaVeldridContext veldridContext)
         {
@@ -75,8 +79,11 @@ namespace Avalonia.Veldrid
                 {
                     var clientSize = ClientSize;
                     _dpi = value;
-                    if (_framebufferSource != null) _framebufferSource.Dpi = value;
-                    Resize(clientSize);
+                    using (TimedLock.Lock(_framebufferLock))
+                    {
+                        if (_framebufferSource != null) _framebufferSource.Dpi = value;
+                    }
+                    if (_hasActualSize) Resize(clientSize);
                     ScalingChanged?.Invoke(Scaling);
                     //Invalidate(new Rect(new Point(0,0), ClientSize));
                 }
@@ -183,6 +190,7 @@ namespace Avalonia.Veldrid
         public virtual void Show()
         {
             _isVisible = true;
+            
         }
 
         public virtual void Hide()
@@ -192,18 +200,41 @@ namespace Avalonia.Veldrid
 
         public virtual void Resize(Size clientSize)
         {
+            _hasActualSize = true;
             var scaling = Scaling;
             _framebufferSize =
                 new FramebufferSize((uint) (clientSize.Width * scaling), (uint) (clientSize.Height * scaling));
             FireResizedIfNecessary();
         }
 
-        public virtual void Render(CommandList commandList)
+        internal void PaintImpl()
         {
-            if (_framebufferSource == null)
+            var paint = Paint;
+            if (paint == null)
                 return;
 
-            if (_framebufferSource.Size == new FramebufferSize(0, 0))
+            lock (_framebufferLock)
+            {
+                if (_framebufferSource == null)
+                    return;
+                var updateTexture = _invalidRegion != Rect.Empty;
+                if (updateTexture)
+                {
+                    paint?.Invoke(_invalidRegion.Intersect(new Rect(new Point(0, 0), ClientSize)));
+                    _invalidRegion = Rect.Empty;
+                    _hasUpdatedImage = true;
+                }
+            }
+        }
+
+        public virtual void Render(CommandList commandList)
+        {
+            var framebufferSource = _framebufferSource;
+
+            if (framebufferSource == null)
+                return;
+
+            if (framebufferSource.Size == new FramebufferSize(0, 0))
                 return;
 
             if (!_isVisible)
@@ -211,38 +242,40 @@ namespace Avalonia.Veldrid
 
             if (IsFullscreen) FireResizedIfNecessary();
 
-            var updateTexture = _invalidRegion != Rect.Empty;
-            if (updateTexture)
+            if (_hasUpdatedImage)
             {
-                Paint?.Invoke(_invalidRegion.Intersect(new Rect(new Point(0,0), ClientSize)));
-                _invalidRegion = Rect.Empty;
+                if (Monitor.TryEnter(_framebufferLock))
+                {
 
+                    try
+                    {
+                        EnsureTexture();
+
+                        var stagingTexture = framebufferSource.GetStagingTexture();
+                        commandList.CopyTexture(stagingTexture, _texture, 0, 0);
+                        if (stagingTexture.MipLevels > 1)
+                            commandList.GenerateMipmaps(_texture);
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_framebufferLock);
+                    }
+
+                    _hasUpdatedImage = false;
+                }
             }
 
             if (_texture == null)
                 return;
 
-            EnsureTexture();
-
-            lock (_gate)
-            {
-                _uniforms.Projection = GetActiveProjection();
-                _uniforms.View = GetActiveView();
-                _uniforms.Model = GetActiveModel();
-                _uniforms.Viewport = _framebufferSource.ViewportSize;
-                commandList.UpdateBuffer(_uniformBuffer, 0, ref _uniforms);
-                if (updateTexture)
-                {
-                    var stagingTexture = _framebufferSource.GetStagingTexture();
-                    commandList.CopyTexture(stagingTexture, _texture, 0, 0);
-                    if (stagingTexture.MipLevels > 1)
-                        commandList.GenerateMipmaps(_texture);
-                }
-
-                commandList.SetPipeline(VeldridContext.Pipeline);
-                commandList.SetGraphicsResourceSet(0, _resrouceSet);
-                commandList.Draw(4);
-            }
+            _uniforms.Projection = GetActiveProjection();
+            _uniforms.View = GetActiveView();
+            _uniforms.Model = GetActiveModel();
+            _uniforms.Viewport = framebufferSource.ViewportSize;
+            commandList.UpdateBuffer(_uniformBuffer, 0, ref _uniforms);
+            commandList.SetPipeline(VeldridContext.Pipeline);
+            commandList.SetGraphicsResourceSet(0, _resrouceSet);
+            commandList.Draw(4);
         }
 
         public void ResetTexelSize()
@@ -335,11 +368,12 @@ namespace Avalonia.Veldrid
             VeldridContext.DeviceCreated -= OnDeviceCreated;
             VeldridContext.DeviceDestroyed -= OnDeviceDestroyed;
 
-            lock (_gate)
+            lock (_framebufferLock)
             {
                 _resrouceSet?.Dispose();
                 _texture?.Dispose();
                 _framebufferSource?.Dispose();
+                _framebufferSource = null;
             }
         }
 
@@ -380,6 +414,12 @@ namespace Avalonia.Veldrid
         public virtual void Invalidate(Rect rect)
         {
             _invalidRegion = _invalidRegion.Union(rect);
+            SchedulePaint();
+        }
+
+        private void SchedulePaint()
+        {
+            VeldridContext.SchedulePaint(this);
         }
 
         /// <summary>
@@ -418,36 +458,45 @@ namespace Avalonia.Veldrid
 
         private void OnDeviceDestroyed()
         {
-            _framebufferSource?.Dispose();
-            _uniformBuffer?.Dispose();
-            _framebufferSource = null;
-            _uniformBuffer = null;
+            lock (_framebufferLock)
+            {
+                _framebufferSource?.Dispose();
+                _uniformBuffer?.Dispose();
+                _framebufferSource = null;
+                _uniformBuffer = null;
+            }
         }
 
         private void OnDeviceCreated(GraphicsDevice obj)
         {
-            _framebufferSource = new TextureFramebufferSource(
-                VeldridContext.GraphicsDevice,
-                _framebufferSize,
-                PixelFormat.Rgba8888,
-                VeldridContext.MipLevels,
-                VeldridContext.AllowNPow2Textures,
-                Dpi);
-            _clientSizeCache = ClientSize;
-            var sizeInBytes = (uint) Marshal.SizeOf<WindowUniforms>();
-            sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
-            _uniformBuffer = GraphicsDevice.ResourceFactory.CreateBuffer(
-                new BufferDescription(sizeInBytes,
-                    BufferUsage.UniformBuffer | BufferUsage.Dynamic));
-            _invalidRegion = new Rect(0,0,double.MaxValue, double.MaxValue);
+            lock (_framebufferLock)
+            {
+                _framebufferSource = new TextureFramebufferSource(
+                    VeldridContext.GraphicsDevice,
+                    _framebufferSize,
+                    PixelFormat.Rgba8888,
+                    VeldridContext.MipLevels,
+                    VeldridContext.AllowNPow2Textures,
+                    Dpi);
+                _clientSizeCache = ClientSize;
+                var sizeInBytes = (uint) Marshal.SizeOf<WindowUniforms>();
+                sizeInBytes = 16 * ((sizeInBytes + 15) / 16);
+                _uniformBuffer = GraphicsDevice.ResourceFactory.CreateBuffer(
+                    new BufferDescription(sizeInBytes,
+                        BufferUsage.UniformBuffer | BufferUsage.Dynamic));
+                Invalidate(new Rect(0, 0, double.MaxValue, double.MaxValue));
+            }
         }
 
         private void FireResizedIfNecessary()
         {
-            if (_framebufferSource != null)
+            using (TimedLock.Lock(_framebufferLock))
             {
-                var framebufferSize = FramebufferSize;
-                if (framebufferSize != _framebufferSource.Size) _framebufferSource.Size = framebufferSize;
+                if (_framebufferSource != null)
+                {
+                    var framebufferSize = FramebufferSize;
+                    if (framebufferSize != _framebufferSource.Size) _framebufferSource.Size = framebufferSize;
+                }
             }
 
             var size = ClientSize;
@@ -500,7 +549,7 @@ namespace Avalonia.Veldrid
 
         private void EnsureTexture()
         {
-            lock (_gate)
+            using (TimedLock.Lock(_framebufferLock))
             {
                 var stagingTexture = _framebufferSource.GetStagingTexture();
                 if (_texture == null || _texture.Width != stagingTexture.Width ||

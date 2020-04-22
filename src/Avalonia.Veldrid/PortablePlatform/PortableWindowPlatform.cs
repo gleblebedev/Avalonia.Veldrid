@@ -37,6 +37,7 @@ namespace Avalonia.Veldrid
 
         public override void RunLoop(CancellationToken cancellationToken)
         {
+            _context.RunLoop(cancellationToken);
         }
 
         public IWindowImpl CreateWindow()

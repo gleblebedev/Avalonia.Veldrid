@@ -25,8 +25,9 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Avalonia" Version="0.9.6" />
-        <PackageReference Include="Avalonia.Skia" Version="0.9.6" />
+        <PackageReference Include="Avalonia" Version="0.9.9" />
+        <PackageReference Include="Avalonia.Skia" Version="0.9.9" />
+        <PackageReference Include="System.Threading.Tasks.Dataflow" Version="4.11.0" />
         <PackageReference Include="Veldrid" Version="$(VeldridVersion)" />
     </ItemGroup>
 
